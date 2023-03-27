@@ -1,8 +1,9 @@
+<svelte:options tag="skyslope-modal" />
 <script>
-    import { getContext } from 'svelte';
-    import Popup from './Popup.svelte';
-    const { open } = getContext('simple-modal');
-    const showSurprise = () => open(Popup, { message: "It's a modal!" });
+    import Modal from "svelte-simple-modal";
+    import CloseButton from "$lib/CloseButton.svelte";
+    import ModalContent from "$lib/ModalContent.svelte";
 </script>
 
-<p><button on:click={showSurprise}>Open Widget</button></p>
+<Modal styleWindow={{width: '100%'}} closeButton={CloseButton}><ModalContent/></Modal>
+
