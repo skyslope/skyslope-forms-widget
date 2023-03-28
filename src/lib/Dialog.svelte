@@ -1,7 +1,7 @@
 <script>
-    export let dialog
+	export let dialog;
 </script>
 
 <dialog bind:this={dialog} on:close>
-    <slot/>
+	<slot />
 </dialog>

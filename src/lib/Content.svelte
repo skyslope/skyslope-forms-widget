@@ -1,9 +1,9 @@
-<svelte:options tag="skyslope-modal" />
+<!--<svelte:options tag="skyslope-modal" />-->
+
 <script>
-    import Modal from "svelte-simple-modal";
-    import CloseButton from "$lib/CloseButton.svelte";
-    import ModalContent from "$lib/ModalContent.svelte";
+	import Modal from 'svelte-simple-modal';
+	import CloseButton from './CloseButton.svelte';
+	import ModalContent from './ModalContent.svelte';
 </script>
 
-<Modal styleWindow={{width: '100%'}} closeButton={CloseButton}><ModalContent/></Modal>
-
+<Modal styleWindow={{ width: '100%' }} closeButton={CloseButton}><ModalContent /></Modal>

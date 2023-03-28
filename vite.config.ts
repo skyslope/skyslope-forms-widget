@@ -1,9 +1,19 @@
-import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
+
+// https://vitejs.dev/config/
 export default defineConfig({
-	plugins: [sveltekit()],
-	test: {
-		include: ['src/**/*.{test,spec}.{js,ts}']
-	}
+	plugins: [
+		svelte({
+			include: ['src/**/*.svelte', 'node_modules/**/*.svelte'],
+			exclude: ['src/lib/Iframe.svelte']
+		}),
+		svelte({
+			include: ['src/lib/Iframe.svelte'],
+			compilerOptions: {
+				customElement: true
+			}
+		})
+	]
 });
