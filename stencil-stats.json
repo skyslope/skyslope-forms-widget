@@ -1,0 +1,211 @@
+{
+  "timestamp": "2023-03-28T18:52:14",
+  "compiler": {
+    "name": "node",
+    "version": "16.19.1"
+  },
+  "app": {
+    "namespace": "SkyslopeFormsWidgetStencil",
+    "fsNamespace": "skyslope-forms-widget",
+    "components": 0,
+    "entries": 0,
+    "bundles": 13,
+    "outputs": [
+      {
+        "name": "dist-custom-elements",
+        "files": 12,
+        "generatedFiles": [
+          "./dist/components/index.d.ts",
+          "./dist/components/index.js",
+          "./dist/components/index.js.map",
+          "./dist/components/my-component.d.ts",
+          "./dist/components/my-component.js",
+          "./dist/components/my-component.js.map",
+          "./dist/components/ss-container-inline.d.ts",
+          "./dist/components/ss-container-inline.js",
+          "./dist/components/ss-container-inline.js.map",
+          "./dist/components/ss-container-modal.d.ts",
+          "./dist/components/ss-container-modal.js",
+          "./dist/components/ss-container-modal.js.map"
+        ]
+      },
+      {
+        "name": "dist-types",
+        "files": 1,
+        "generatedFiles": [
+          "./dist/types/stencil-public-runtime.d.ts"
+        ]
+      }
+    ]
+  },
+  "options": {
+    "minifyJs": true,
+    "minifyCss": true,
+    "hashFileNames": true,
+    "hashedFileNameLength": 8,
+    "buildEs5": false
+  },
+  "formats": {
+    "esmBrowser": [],
+    "esm": [],
+    "es5": [],
+    "system": [],
+    "commonjs": []
+  },
+  "components": [
+    {
+      "tag": "my-component",
+      "path": "./src/components/my-component/my-component.js",
+      "source": "./src/components/my-component/my-component.tsx",
+      "elementRef": null,
+      "componentClassName": "MyComponent",
+      "assetsDirs": [],
+      "dependencies": [],
+      "dependents": [],
+      "directDependencies": [],
+      "directDependents": [],
+      "docs": {
+        "tags": [],
+        "text": ""
+      },
+      "encapsulation": "shadow",
+      "excludeFromCollection": false,
+      "events": [],
+      "internal": false,
+      "legacyConnect": [],
+      "legacyContext": [],
+      "listeners": [],
+      "methods": [],
+      "potentialCmpRefs": [],
+      "properties": [
+        {
+          "name": "first",
+          "type": "string",
+          "attribute": "first",
+          "reflect": false,
+          "mutable": false,
+          "required": false,
+          "optional": false,
+          "complexType": {
+            "original": "string",
+            "resolved": "string",
+            "references": {}
+          },
+          "docs": {
+            "tags": [],
+            "text": "The first name"
+          },
+          "internal": false
+        },
+        {
+          "name": "middle",
+          "type": "string",
+          "attribute": "middle",
+          "reflect": false,
+          "mutable": false,
+          "required": false,
+          "optional": false,
+          "complexType": {
+            "original": "string",
+            "resolved": "string",
+            "references": {}
+          },
+          "docs": {
+            "tags": [],
+            "text": "The middle name"
+          },
+          "internal": false
+        },
+        {
+          "name": "last",
+          "type": "string",
+          "attribute": "last",
+          "reflect": false,
+          "mutable": false,
+          "required": false,
+          "optional": false,
+          "complexType": {
+            "original": "string",
+            "resolved": "string",
+            "references": {}
+          },
+          "docs": {
+            "tags": [],
+            "text": "The last name"
+          },
+          "internal": false
+        }
+      ],
+      "shadowDelegatesFocus": false,
+      "states": []
+    },
+    {
+      "tag": "ss-container-inline",
+      "path": "./src/components/ss-container-inline/ss-container-inline.js",
+      "source": "./src/components/ss-container-inline/ss-container-inline.tsx",
+      "elementRef": null,
+      "componentClassName": "SsContainerInline",
+      "assetsDirs": [],
+      "dependencies": [],
+      "dependents": [],
+      "directDependencies": [],
+      "directDependents": [],
+      "docs": {
+        "tags": [],
+        "text": ""
+      },
+      "encapsulation": "shadow",
+      "excludeFromCollection": false,
+      "events": [],
+      "internal": false,
+      "legacyConnect": [],
+      "legacyContext": [],
+      "listeners": [],
+      "methods": [],
+      "potentialCmpRefs": [],
+      "properties": [],
+      "shadowDelegatesFocus": false,
+      "states": []
+    },
+    {
+      "tag": "ss-container-modal",
+      "path": "./src/components/ss-container-modal/ss-container-modal.js",
+      "source": "./src/components/ss-container-modal/ss-container-modal.tsx",
+      "elementRef": null,
+      "componentClassName": "SsContainerModal",
+      "assetsDirs": [],
+      "dependencies": [],
+      "dependents": [],
+      "directDependencies": [],
+      "directDependents": [],
+      "docs": {
+        "tags": [],
+        "text": ""
+      },
+      "encapsulation": "shadow",
+      "excludeFromCollection": false,
+      "events": [],
+      "internal": false,
+      "legacyConnect": [],
+      "legacyContext": [],
+      "listeners": [],
+      "methods": [],
+      "potentialCmpRefs": [],
+      "properties": [],
+      "shadowDelegatesFocus": false,
+      "states": []
+    }
+  ],
+  "entries": [],
+  "componentGraph": {},
+  "sourceGraph": {
+    "./src/components/my-component/my-component.tsx": [
+      "./src/utils/utils"
+    ],
+    "./src/components/ss-container-inline/ss-container-inline.tsx": [],
+    "./src/components/ss-container-modal/ss-container-modal.tsx": [],
+    "./src/index.ts": [],
+    "./src/utils/utils.ts": []
+  },
+  "collections": []
+}
