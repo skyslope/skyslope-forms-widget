@@ -6,20 +6,6 @@
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
-    interface MyComponent {
-        /**
-          * The first name
-         */
-        "first": string;
-        /**
-          * The last name
-         */
-        "last": string;
-        /**
-          * The middle name
-         */
-        "middle": string;
-    }
     interface SsContainerInline {
         /**
           * The first name
@@ -50,12 +36,6 @@ export interface SsContainerModalCustomEvent<T> extends CustomEvent<T> {
     target: HTMLSsContainerModalElement;
 }
 declare global {
-    interface HTMLMyComponentElement extends Components.MyComponent, HTMLStencilElement {
-    }
-    var HTMLMyComponentElement: {
-        prototype: HTMLMyComponentElement;
-        new (): HTMLMyComponentElement;
-    };
     interface HTMLSsContainerInlineElement extends Components.SsContainerInline, HTMLStencilElement {
     }
     var HTMLSsContainerInlineElement: {
@@ -75,27 +55,12 @@ declare global {
         new (): HTMLSsIconButtonElement;
     };
     interface HTMLElementTagNameMap {
-        "my-component": HTMLMyComponentElement;
         "ss-container-inline": HTMLSsContainerInlineElement;
         "ss-container-modal": HTMLSsContainerModalElement;
         "ss-icon-button": HTMLSsIconButtonElement;
     }
 }
 declare namespace LocalJSX {
-    interface MyComponent {
-        /**
-          * The first name
-         */
-        "first"?: string;
-        /**
-          * The last name
-         */
-        "last"?: string;
-        /**
-          * The middle name
-         */
-        "middle"?: string;
-    }
     interface SsContainerInline {
         /**
           * The first name
@@ -129,7 +94,6 @@ declare namespace LocalJSX {
     interface SsIconButton {
     }
     interface IntrinsicElements {
-        "my-component": MyComponent;
         "ss-container-inline": SsContainerInline;
         "ss-container-modal": SsContainerModal;
         "ss-icon-button": SsIconButton;
@@ -139,7 +103,6 @@ export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
-            "my-component": LocalJSX.MyComponent & JSXBase.HTMLAttributes<HTMLMyComponentElement>;
             "ss-container-inline": LocalJSX.SsContainerInline & JSXBase.HTMLAttributes<HTMLSsContainerInlineElement>;
             "ss-container-modal": LocalJSX.SsContainerModal & JSXBase.HTMLAttributes<HTMLSsContainerModalElement>;
             "ss-icon-button": LocalJSX.SsIconButton & JSXBase.HTMLAttributes<HTMLSsIconButtonElement>;

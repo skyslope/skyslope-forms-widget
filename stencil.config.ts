@@ -15,10 +15,10 @@ export const config: Config = {
     ...environment[appEnv]
   },
   outputTargets: [
-    // {
-    //   type: 'dist',
-    //   esmLoaderPath: '../loader',
-    // },
+    {
+      type: 'dist',
+      esmLoaderPath: '../loader',
+    },
     {
       type: 'dist-custom-elements',
     },
