@@ -1,7 +1,20 @@
 import { Config } from '@stencil/core';
-import { AppEnv, environment } from './environment';
+import {AppEnvironment, environment} from './environment';
 
-const appEnv: AppEnv = process.argv && process.argv.indexOf('--dev') > -1 ? 'dev' : 'prod';
+const environmentsMap = {
+  '--dev': AppEnvironment.DEVELOPMENT,
+  '--integ': AppEnvironment.INTEG,
+  '--staging': AppEnvironment.STAGING,
+  '--prod': AppEnvironment.PRODUCTION,
+};
+let appEnv = AppEnvironment.DEVELOPMENT;
+if (process.argv) {
+  for (let i = 0; i < process.argv.length; i++) {
+    if (environmentsMap[process.argv[i]]) {
+      appEnv = environmentsMap[process.argv[i]];
+    }
+  }
+}
 
 export const config: Config = {
   namespace: 'skyslope-forms-widget',
