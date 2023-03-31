@@ -13,10 +13,19 @@ export class SsContainerInline {
 
   @Element() el: HTMLSsContainerInlineElement;
 
+  private iframe() {
+    return this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement;
+  }
+
   connectedCallback() {
-    window.skyslope.refreshIframe = () => {
-      (this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement).contentWindow.postMessage('reload');
+    window.skyslope.reload = () => {
+      console.log('refreshing iframe');
+      this.iframe().contentWindow.postMessage('reload', Env.formsUrl);
     };
+
+    window.skyslope.navigateTo = (path: string) => {
+      this.iframe().src = `${Env.formsUrl}${path}`
+    }
   }
 
   render() {

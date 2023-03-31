@@ -19,6 +19,7 @@ export default function() {
   window.skyslope = {
     openModal,
     closeModal,
-    refreshIframe: () => {},
+    reload: () => {},
+    navigateTo: () => {},
   };
 }

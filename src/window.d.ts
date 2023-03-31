@@ -4,7 +4,8 @@ declare global {
     skyslope: {
       openModal: () => void;
       closeModal: () => void;
-      refreshIframe: () => void;
+      reload: () => void;
+      navigateTo: (path: string) => void;
     }
   }
 }
