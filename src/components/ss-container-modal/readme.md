@@ -7,10 +7,14 @@
 
 ## Properties
 
-| Property  | Attribute | Description                         | Type                                                                                                                         | Default     |
-| --------- | --------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `classes` | --        | Classes override for custom styling | `{ modalWrapper?: string; modalOverlay?: string; modalHeader?: string; modalContent?: string; maxWidthContainer?: string; }` | `undefined` |
-| `open`    | `open`    | Should the modal be open            | `boolean`                                                                                                                    | `undefined` |
+| Property                  | Attribute                    | Description                           | Type                                                                                                                                                                                                                             | Default |
+| ------------------------- | ---------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `open`                    | `open`                       | Should the modal be open              | `boolean`                                                                                                                                                                                                                        | `true`  |
+| `roundedEdges`            | `rounded-edges`              | Should the modal have a rounded edges | `boolean`                                                                                                                                                                                                                        | `true`  |
+| `shouldConstrainMaxWidth` | `should-constrain-max-width` | Should the modal have a maximum width | `boolean`                                                                                                                                                                                                                        | `true`  |
+| `showHeaderButtons`       | `show-header-buttons`        | Should the modal have a rounded edges | `boolean`                                                                                                                                                                                                                        | `true`  |
+| `showOverlay`             | `show-overlay`               | Should the modal have an overlay      | `boolean`                                                                                                                                                                                                                        | `true`  |
+| `styleOverrides`          | --                           | Classes override for custom styling   | `{ modalWrapper?: { [key: string]: string; }; modalOverlay?: { [key: string]: string; }; modalHeader?: { [key: string]: string; }; modalContent?: { [key: string]: string; }; maxWidthContainer?: { [key: string]: string; }; }` | `{}`    |
 
 
 ## Events

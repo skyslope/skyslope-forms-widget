@@ -8,25 +8,41 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface SsContainerInline {
         /**
-          * The first name
+          * Identity provider for SSO
          */
         "idp": string;
     }
     interface SsContainerModal {
         /**
-          * Classes override for custom styling
-         */
-        "classes"?: {
-    modalWrapper?: string;
-    modalOverlay?: string;
-    modalHeader?: string;
-    modalContent?: string;
-    maxWidthContainer?: string;
-  };
-        /**
           * Should the modal be open
          */
         "open": boolean;
+        /**
+          * Should the modal have a rounded edges
+         */
+        "roundedEdges": boolean;
+        /**
+          * Should the modal have a maximum width
+         */
+        "shouldConstrainMaxWidth": boolean;
+        /**
+          * Should the modal have a rounded edges
+         */
+        "showHeaderButtons": boolean;
+        /**
+          * Should the modal have an overlay
+         */
+        "showOverlay": boolean;
+        /**
+          * Classes override for custom styling
+         */
+        "styleOverrides"?: {
+    modalWrapper?: { [key: string]: string; };
+    modalOverlay?: { [key: string]: string; };
+    modalHeader?: { [key: string]: string; };
+    modalContent?: { [key: string]: string; };
+    maxWidthContainer?: { [key: string]: string; };
+  };
     }
     interface SsIconButton {
     }
@@ -63,21 +79,11 @@ declare global {
 declare namespace LocalJSX {
     interface SsContainerInline {
         /**
-          * The first name
+          * Identity provider for SSO
          */
         "idp": string;
     }
     interface SsContainerModal {
-        /**
-          * Classes override for custom styling
-         */
-        "classes"?: {
-    modalWrapper?: string;
-    modalOverlay?: string;
-    modalHeader?: string;
-    modalContent?: string;
-    maxWidthContainer?: string;
-  };
         /**
           * Callback when close button clicked  Closing of the modal should happen automatically, but this event will also be called  Call with onCloseClicked (using JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
          */
@@ -90,6 +96,32 @@ declare namespace LocalJSX {
           * Should the modal be open
          */
         "open"?: boolean;
+        /**
+          * Should the modal have a rounded edges
+         */
+        "roundedEdges"?: boolean;
+        /**
+          * Should the modal have a maximum width
+         */
+        "shouldConstrainMaxWidth"?: boolean;
+        /**
+          * Should the modal have a rounded edges
+         */
+        "showHeaderButtons"?: boolean;
+        /**
+          * Should the modal have an overlay
+         */
+        "showOverlay"?: boolean;
+        /**
+          * Classes override for custom styling
+         */
+        "styleOverrides"?: {
+    modalWrapper?: { [key: string]: string; };
+    modalOverlay?: { [key: string]: string; };
+    modalHeader?: { [key: string]: string; };
+    modalContent?: { [key: string]: string; };
+    maxWidthContainer?: { [key: string]: string; };
+  };
     }
     interface SsIconButton {
     }

@@ -1,14 +1,13 @@
-import { Component, Host, h, Prop, Fragment, Event, EventEmitter } from '@stencil/core';
+import {Component, Host, h, Prop, Fragment, Event, EventEmitter} from '@stencil/core';
 
 const CloseSvg = () => <svg xmlns='http://www.w3.org/2000/svg' height='24' viewBox='0 96 960 960' width='24'>
   <path
-    d='M256 842.153 213.847 800l224-224-224-224L256 309.847l224 224 224-224L746.153 352l-224 224 224 224L704 842.153l-224-224-224 224Z' />
+    d='M256 842.153 213.847 800l224-224-224-224L256 309.847l224 224 224-224L746.153 352l-224 224 224 224L704 842.153l-224-224-224 224Z'/>
 </svg>;
 const RefreshSvg = () => <svg xmlns='http://www.w3.org/2000/svg' height='24' viewBox='0 96 960 960' width='24'>
   <path
-    d='M481.539 875.999q-125.625 0-212.812-87.17-87.187-87.169-87.187-212.768t87.187-212.829q87.187-87.231 212.812-87.231 70.154 0 132.769 31.193 62.615 31.192 104.153 88.039V276.001h59.999v244.613H533.847v-59.998h157.999q-31.615-57.923-87.692-91.27Q548.077 336 481.539 336q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h63.229q-27.231 97.922-107.269 158.961-80.038 61.038-181.96 61.038Z' />
+    d='M481.539 875.999q-125.625 0-212.812-87.17-87.187-87.169-87.187-212.768t87.187-212.829q87.187-87.231 212.812-87.231 70.154 0 132.769 31.193 62.615 31.192 104.153 88.039V276.001h59.999v244.613H533.847v-59.998h157.999q-31.615-57.923-87.692-91.27Q548.077 336 481.539 336q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h63.229q-27.231 97.922-107.269 158.961-80.038 61.038-181.96 61.038Z'/>
 </svg>;
-
 
 
 @Component({
@@ -20,17 +19,39 @@ export class SsContainerModal {
   /**
    * Should the modal be open
    */
-  @Prop() readonly open: boolean;
+  @Prop() readonly open: boolean = true;
+
+  /**
+   * Should the modal have an overlay
+   */
+  @Prop() readonly showOverlay: boolean = true;
+
+  /**
+   * Should the modal have a maximum width
+   */
+  @Prop() readonly shouldConstrainMaxWidth: boolean = true;
+
+  /**
+   * Should the modal have a rounded edges
+   */
+  @Prop() readonly roundedEdges: boolean = true;
+
+  /**
+   * Should the modal have a rounded edges
+   */
+  @Prop() readonly showHeaderButtons: boolean = true;
+
   /**
    * Classes override for custom styling
    */
-  @Prop() readonly classes?: {
-    modalWrapper?: string;
-    modalOverlay?: string;
-    modalHeader?: string;
-    modalContent?: string;
-    maxWidthContainer?: string;
-  };
+  @Prop() readonly styleOverrides?: {
+    modalWrapper?: { [key: string]: string; };
+    modalOverlay?: { [key: string]: string; };
+    modalHeader?: { [key: string]: string; };
+    modalContent?: { [key: string]: string; };
+    maxWidthContainer?: { [key: string]: string; };
+  } = {};
+
   /**
    * Callback when close button clicked
    *
@@ -41,6 +62,7 @@ export class SsContainerModal {
    * ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
    */
   @Event() closeClicked: EventEmitter<void>;
+
   /**
    * Callback when refresh button clicked
    *
@@ -52,7 +74,7 @@ export class SsContainerModal {
    */
   @Event() refreshClicked: EventEmitter<void>;
 
-  private closeClickedHandler= (e) => {
+  private closeClickedHandler = (e) => {
     e.stopPropagation();
     this.closeClicked.emit(e);
     window.skyslope.closeModal();
@@ -64,28 +86,25 @@ export class SsContainerModal {
   }
 
   render() {
-    const modalWrapperClass = this.classes?.modalWrapper ?? 'modal-wrapper';
-    const modalOverlayClass = this.classes?.modalOverlay ?? 'modal-overlay';
-    const modalHeaderClass = this.classes?.modalHeader ?? 'modal-header';
-    const modalContentClass = this.classes?.modalContent ?? 'modal-content';
-    const maxWidthContainerClass = this.classes?.maxWidthContainer ?? 'max-width-container';
-
     return (
       <Host>
         {this.open ? <Fragment>
-          <div class={modalOverlayClass}></div>
-          <div class={modalWrapperClass}>
-            <div class={maxWidthContainerClass}>
-              <div class={modalHeaderClass}>
-                <slot></slot>{/*user could add their own buttons if they wanted to*/}
+          {this.showOverlay && <div class={'modal-overlay'} style={this.styleOverrides.modalOverlay}></div>}
+          <div class={'modal-wrapper'} style={this.styleOverrides.modalWrapper}>
+            <div class={this.shouldConstrainMaxWidth ? 'max-width-container' : ''}
+                 style={this.styleOverrides.maxWidthContainer}>
+              {this.showHeaderButtons ? <div class={'modal-header'} style={this.styleOverrides.modalHeader}>
+                <slot></slot>
+                {/*user could add their own buttons if they wanted to*/}
                 <ss-icon-button onClick={this.refreshClickedHandler}>
-                  <RefreshSvg />
+                  <RefreshSvg/>
                 </ss-icon-button>
                 <ss-icon-button onClick={this.closeClickedHandler}>
-                  <CloseSvg />
+                  <CloseSvg/>
                 </ss-icon-button>
-              </div>
-              <div class={modalContentClass}>
+              </div> : null}
+              <div class={`modal-content ${this.roundedEdges ? 'rounded-edges' : ''}`}
+                   style={this.styleOverrides.modalContent}>
                 <ss-container-inline idp='ure'></ss-container-inline>
               </div>
             </div>
