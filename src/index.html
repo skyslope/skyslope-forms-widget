@@ -13,6 +13,7 @@
 
   </head>
   <body>
+  <ss-button-create-listing>test</ss-button-create-listing>
   <button id='modal-open-btn'>
     Open Modal
   </button>
@@ -20,6 +21,11 @@
 </html>
 
 <script>
+  const btn = document.querySelector('ss-button-create-listing');
+  btn.addEventListener('click', () => {
+  console.log('ayyyyy')
+})
+
   const modalOpenBtn = document.getElementById('modal-open-btn');
   modalOpenBtn.addEventListener('click', () => {
     window.skyslope.openModal();

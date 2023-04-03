@@ -57,7 +57,7 @@ export class SsContainerModal {
    *
    * Closing of the modal should happen automatically, but this event will also be called
    *
-   * Call with onCloseClicked (using JSX) or
+   * Call with onCloseClicked (if your app uses JSX) or
    * ```const ssContainerModal = document.querySelector('ss-container-modal');
    * ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
    */
@@ -68,7 +68,7 @@ export class SsContainerModal {
    *
    * Refresh will be handled automatically, but this event will also be called
    *
-   * Call with onCloseClicked (using JSX) or
+   * Call with onCloseClicked (if your app uses JSX) or
    * ```const ssContainerModal = document.querySelector('ss-container-modal');
    * ssContainerModal.addEventListener('refreshClicked', event => {  your listener })```
    */

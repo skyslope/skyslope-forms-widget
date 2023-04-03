@@ -6,6 +6,9 @@
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
+    interface SsButtonCreateListing {
+        "unStyled": boolean;
+    }
     interface SsContainerInline {
         /**
           * Identity provider for SSO
@@ -52,6 +55,12 @@ export interface SsContainerModalCustomEvent<T> extends CustomEvent<T> {
     target: HTMLSsContainerModalElement;
 }
 declare global {
+    interface HTMLSsButtonCreateListingElement extends Components.SsButtonCreateListing, HTMLStencilElement {
+    }
+    var HTMLSsButtonCreateListingElement: {
+        prototype: HTMLSsButtonCreateListingElement;
+        new (): HTMLSsButtonCreateListingElement;
+    };
     interface HTMLSsContainerInlineElement extends Components.SsContainerInline, HTMLStencilElement {
     }
     var HTMLSsContainerInlineElement: {
@@ -71,12 +80,16 @@ declare global {
         new (): HTMLSsIconButtonElement;
     };
     interface HTMLElementTagNameMap {
+        "ss-button-create-listing": HTMLSsButtonCreateListingElement;
         "ss-container-inline": HTMLSsContainerInlineElement;
         "ss-container-modal": HTMLSsContainerModalElement;
         "ss-icon-button": HTMLSsIconButtonElement;
     }
 }
 declare namespace LocalJSX {
+    interface SsButtonCreateListing {
+        "unStyled"?: boolean;
+    }
     interface SsContainerInline {
         /**
           * Identity provider for SSO
@@ -85,11 +98,11 @@ declare namespace LocalJSX {
     }
     interface SsContainerModal {
         /**
-          * Callback when close button clicked  Closing of the modal should happen automatically, but this event will also be called  Call with onCloseClicked (using JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
+          * Callback when close button clicked  Closing of the modal should happen automatically, but this event will also be called  Call with onCloseClicked (if your app uses JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
          */
         "onCloseClicked"?: (event: SsContainerModalCustomEvent<void>) => void;
         /**
-          * Callback when refresh button clicked  Refresh will be handled automatically, but this event will also be called  Call with onCloseClicked (using JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('refreshClicked', event => {  your listener })```
+          * Callback when refresh button clicked  Refresh will be handled automatically, but this event will also be called  Call with onCloseClicked (if your app uses JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('refreshClicked', event => {  your listener })```
          */
         "onRefreshClicked"?: (event: SsContainerModalCustomEvent<void>) => void;
         /**
@@ -126,6 +139,7 @@ declare namespace LocalJSX {
     interface SsIconButton {
     }
     interface IntrinsicElements {
+        "ss-button-create-listing": SsButtonCreateListing;
         "ss-container-inline": SsContainerInline;
         "ss-container-modal": SsContainerModal;
         "ss-icon-button": SsIconButton;
@@ -135,6 +149,7 @@ export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
+            "ss-button-create-listing": LocalJSX.SsButtonCreateListing & JSXBase.HTMLAttributes<HTMLSsButtonCreateListingElement>;
             "ss-container-inline": LocalJSX.SsContainerInline & JSXBase.HTMLAttributes<HTMLSsContainerInlineElement>;
             "ss-container-modal": LocalJSX.SsContainerModal & JSXBase.HTMLAttributes<HTMLSsContainerModalElement>;
             "ss-icon-button": LocalJSX.SsIconButton & JSXBase.HTMLAttributes<HTMLSsIconButtonElement>;
