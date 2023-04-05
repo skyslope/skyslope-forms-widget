@@ -17,6 +17,10 @@ export namespace Components {
     }
     interface SsContainerModal {
         /**
+          * Is refresh button shown (default disabled)
+         */
+        "isRefreshButtonEnabled": boolean;
+        /**
           * Should the modal be open
          */
         "open": boolean;
@@ -97,6 +101,10 @@ declare namespace LocalJSX {
         "idp": string;
     }
     interface SsContainerModal {
+        /**
+          * Is refresh button shown (default disabled)
+         */
+        "isRefreshButtonEnabled"?: boolean;
         /**
           * Callback when close button clicked  Closing of the modal should happen automatically, but this event will also be called  Call with onCloseClicked (if your app uses JSX) or ```const ssContainerModal = document.querySelector('ss-container-modal'); ssContainerModal.addEventListener('closeClicked', event => {  your listener })```
          */

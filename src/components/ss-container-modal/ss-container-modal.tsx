@@ -42,6 +42,11 @@ export class SsContainerModal {
   @Prop() readonly showHeaderButtons: boolean = true;
 
   /**
+   * Is refresh button shown (default disabled)
+   */
+  @Prop() readonly isRefreshButtonEnabled: boolean = false;
+
+  /**
    * Classes override for custom styling
    */
   @Prop() readonly styleOverrides?: {
@@ -96,9 +101,9 @@ export class SsContainerModal {
               {this.showHeaderButtons ? <div class={'modal-header'} style={this.styleOverrides.modalHeader}>
                 <slot></slot>
                 {/*user could add their own buttons if they wanted to*/}
-                <ss-icon-button onClick={this.refreshClickedHandler}>
+                {this.isRefreshButtonEnabled && <ss-icon-button onClick={this.refreshClickedHandler}>
                   <RefreshSvg/>
-                </ss-icon-button>
+                </ss-icon-button>}
                 <ss-icon-button onClick={this.closeClickedHandler}>
                   <CloseSvg/>
                 </ss-icon-button>
