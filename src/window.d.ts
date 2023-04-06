@@ -40,8 +40,11 @@ export interface SkyslopeConfig {
 
 declare global {
   interface Window {
-    skyslope?: SkySlopeWidget// & { onLoad?: () => void}
-    skyslopeOnLoad: () => void;
+    skyslope?: {
+      widget?: SkySlopeWidget;
+      onLoad?: () => void
+    }
+    // skyslopeOnLoad: () => void;
     // skyslope: {
     //   initialize: (config: SkyslopeConfig) => void;
     //   openModal: (modalProps?: ModalProps) => void;

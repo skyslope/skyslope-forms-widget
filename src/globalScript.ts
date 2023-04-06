@@ -1,3 +1,5 @@
+/* eslint-disable @stencil-community/strict-boolean-conditions */
+
 import {ModalProps, SkyslopeConfig} from "./window";
 import {SkyslopePaths} from "./components/ss-container-inline/types";
 
@@ -82,6 +84,8 @@ export class SkySlopeWidget {
 
 
 export default function () {
-  window.skyslope = new SkySlopeWidget();
-  window.skyslopeOnLoad?.();
+  if(!window.skyslope) window.skyslope = {};
+  const onLoad = window.skyslope?.onLoad;
+  window.skyslope.widget = new SkySlopeWidget();
+  onLoad?.();
 }

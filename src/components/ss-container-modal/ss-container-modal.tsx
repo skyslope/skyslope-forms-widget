@@ -82,12 +82,12 @@ export class SsContainerModal {
   private closeClickedHandler = (e) => {
     e.stopPropagation();
     this.closeClicked.emit(e);
-    window.skyslope.closeModal();
+    window.skyslope.widget.closeModal();
   }
   private refreshClickedHandler = (e) => {
     e.stopPropagation();
     this.refreshClicked.emit();
-    window.skyslope.reload();
+    window.skyslope.widget.reload();
   }
 
   render() {

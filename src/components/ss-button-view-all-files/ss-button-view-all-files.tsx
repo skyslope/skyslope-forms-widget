@@ -19,9 +19,9 @@ export class SsButtonViewAllFiles {
 
   @Listen('click', {})
   handleClick() {
-    window.skyslope.navigateToCreateListing();
-    if (!window.skyslope.openInline) {
-      window.skyslope.openModal();
+    window.skyslope.widget.navigateToCreateListing();
+    if (!window.skyslope.widget.openInline) {
+      window.skyslope.widget.openModal();
     }
   }
 

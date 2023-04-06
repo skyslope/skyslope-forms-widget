@@ -20,17 +20,17 @@ export class SsContainerInline {
 
   private navigateTo(path: string) {
     console.log('navigateTo 2');
-    this.iframe().src = `${Env.formsUrl}${path}?idp=${window.skyslope.idp}`;
-    // window.skyslope.path = path;
+    this.iframe().src = `${Env.formsUrl}${path}?idp=${window.skyslope.widget.idp}`;
+    // window.skyslope.widget.path = path;
   }
 
   connectedCallback() {
-    window.skyslope.reload = () => this.reloadIframe();
-    window.skyslope.navigateTo = (path: string) => this.navigateTo(path);
-    window.skyslope.navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
-    window.skyslope.navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
-    window.skyslope.navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
-    window.skyslope.navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
+    window.skyslope.widget.reload = () => this.reloadIframe();
+    window.skyslope.widget.navigateTo = (path: string) => this.navigateTo(path);
+    window.skyslope.widget.navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
+    window.skyslope.widget.navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
+    window.skyslope.widget.navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
+    window.skyslope.widget.navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
   }
 
   disconnectedCallback() {
@@ -38,12 +38,12 @@ export class SsContainerInline {
     reinitializeGlobalScript();
   }
 
-  private idpQuerystring = window.skyslope.path.includes('?') ? `&idp=${window.skyslope.idp}` : `?idp=${window.skyslope.idp}`;
+  private idpQuerystring = window.skyslope.widget.path.includes('?') ? `&idp=${window.skyslope.widget.idp}` : `?idp=${window.skyslope.widget.idp}`;
 
   render() {
     return (
       <Host>
-        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={`${Env.formsUrl}${window.skyslope.path}${this.idpQuerystring}`} />
+        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={`${Env.formsUrl}${window.skyslope.widget.path}${this.idpQuerystring}`} />
       </Host>
     );
   }

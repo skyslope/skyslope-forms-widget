@@ -20,8 +20,8 @@
 </html>
 
 <script>
-  const init = () => window.skyslope.initialize({
+  const init = () => window.skyslope.widget.initialize({
     idp: 'ure', // the idp for SSO
   })
-  window.skyslope ? init() : window.skyslopeOnLoad = () => init()
+  window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
 </script>
