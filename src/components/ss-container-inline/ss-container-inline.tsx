@@ -1,6 +1,6 @@
 import { Component, Host, h, Prop, Env, Element } from '@stencil/core';
-import {SkyslopePaths} from "./types";
-import reinitializeGlobalScript from "../../globalScript";
+import { SkyslopePaths } from './types';
+import reinitializeGlobalScript from '../../globalScript';
 
 @Component({
   tag: 'ss-container-inline',
@@ -24,18 +24,18 @@ export class SsContainerInline {
   }
 
   private navigateTo(path: string) {
-    console.log('navigateTo 2')
-    this.iframe().src = `${Env.formsUrl}${path}?idp=${this.idp}`
+    console.log('navigateTo 2');
+    this.iframe().src = `${Env.formsUrl}${path}?idp=${this.idp}`;
     window.skyslope.path = path;
   }
 
   connectedCallback() {
-    window.skyslope.reload = () => this.reloadIframe()
-    window.skyslope.navigateTo = (path: string) => this.navigateTo(path)
-    window.skyslope.navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction)
-    window.skyslope.navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing)
-    window.skyslope.navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries)
-    window.skyslope.navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles)
+    window.skyslope.reload = () => this.reloadIframe();
+    window.skyslope.navigateTo = (path: string) => this.navigateTo(path);
+    window.skyslope.navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
+    window.skyslope.navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
+    window.skyslope.navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
+    window.skyslope.navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
   }
 
   disconnectedCallback() {
@@ -43,18 +43,13 @@ export class SsContainerInline {
     reinitializeGlobalScript();
   }
 
+  private idpQuerystring = window.skyslope.path.includes('?') ? `&idp=${this.idp}` : `?idp=${this.idp}`;
+
   render() {
     return (
       <Host>
-        <iframe
-          id='ss-container-iframe'
-          frameborder='0'
-          allowfullScreen
-          title='SkySlope Forms'
-          src={`${Env.formsUrl}${window.skyslope.path}?idp=${this.idp}`}
-        />
+        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={`${Env.formsUrl}${window.skyslope.path}${this.idpQuerystring}`} />
       </Host>
     );
   }
-
 }

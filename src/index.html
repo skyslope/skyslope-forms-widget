@@ -10,24 +10,11 @@
 
     <!--    <script type="module" src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>-->
     <!--    <script nomodule src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>-->
-
   </head>
   <body>
-  <ss-button-create-listing>test</ss-button-create-listing>
-  <button id='modal-open-btn'>
-    Open Modal
-  </button>
+    <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
+    <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
+    <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
+    <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
   </body>
 </html>
-
-<script>
-  const btn = document.querySelector('ss-button-create-listing');
-  btn.addEventListener('click', () => {
-  console.log('ayyyyy')
-})
-
-  const modalOpenBtn = document.getElementById('modal-open-btn');
-  modalOpenBtn.addEventListener('click', () => {
-    window.skyslope.openModal();
-  })
-</script>

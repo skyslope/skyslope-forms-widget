@@ -6,8 +6,21 @@
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
+    interface SsButtonBrowseLibraries {
+        "openModal": boolean;
+        "unstyled": boolean;
+    }
     interface SsButtonCreateListing {
-        "unStyled": boolean;
+        "openModal": boolean;
+        "unstyled": boolean;
+    }
+    interface SsButtonViewAllFiles {
+        "openModal": boolean;
+        "unstyled": boolean;
+    }
+    interface SsButtonWriteOffer {
+        "openModal": boolean;
+        "unstyled": boolean;
     }
     interface SsContainerInline {
         /**
@@ -55,11 +68,29 @@ export interface SsContainerModalCustomEvent<T> extends CustomEvent<T> {
     target: HTMLSsContainerModalElement;
 }
 declare global {
+    interface HTMLSsButtonBrowseLibrariesElement extends Components.SsButtonBrowseLibraries, HTMLStencilElement {
+    }
+    var HTMLSsButtonBrowseLibrariesElement: {
+        prototype: HTMLSsButtonBrowseLibrariesElement;
+        new (): HTMLSsButtonBrowseLibrariesElement;
+    };
     interface HTMLSsButtonCreateListingElement extends Components.SsButtonCreateListing, HTMLStencilElement {
     }
     var HTMLSsButtonCreateListingElement: {
         prototype: HTMLSsButtonCreateListingElement;
         new (): HTMLSsButtonCreateListingElement;
+    };
+    interface HTMLSsButtonViewAllFilesElement extends Components.SsButtonViewAllFiles, HTMLStencilElement {
+    }
+    var HTMLSsButtonViewAllFilesElement: {
+        prototype: HTMLSsButtonViewAllFilesElement;
+        new (): HTMLSsButtonViewAllFilesElement;
+    };
+    interface HTMLSsButtonWriteOfferElement extends Components.SsButtonWriteOffer, HTMLStencilElement {
+    }
+    var HTMLSsButtonWriteOfferElement: {
+        prototype: HTMLSsButtonWriteOfferElement;
+        new (): HTMLSsButtonWriteOfferElement;
     };
     interface HTMLSsContainerInlineElement extends Components.SsContainerInline, HTMLStencilElement {
     }
@@ -80,15 +111,31 @@ declare global {
         new (): HTMLSsIconButtonElement;
     };
     interface HTMLElementTagNameMap {
+        "ss-button-browse-libraries": HTMLSsButtonBrowseLibrariesElement;
         "ss-button-create-listing": HTMLSsButtonCreateListingElement;
+        "ss-button-view-all-files": HTMLSsButtonViewAllFilesElement;
+        "ss-button-write-offer": HTMLSsButtonWriteOfferElement;
         "ss-container-inline": HTMLSsContainerInlineElement;
         "ss-container-modal": HTMLSsContainerModalElement;
         "ss-icon-button": HTMLSsIconButtonElement;
     }
 }
 declare namespace LocalJSX {
+    interface SsButtonBrowseLibraries {
+        "openModal"?: boolean;
+        "unstyled"?: boolean;
+    }
     interface SsButtonCreateListing {
-        "unStyled"?: boolean;
+        "openModal"?: boolean;
+        "unstyled"?: boolean;
+    }
+    interface SsButtonViewAllFiles {
+        "openModal"?: boolean;
+        "unstyled"?: boolean;
+    }
+    interface SsButtonWriteOffer {
+        "openModal"?: boolean;
+        "unstyled"?: boolean;
     }
     interface SsContainerInline {
         /**
@@ -139,7 +186,10 @@ declare namespace LocalJSX {
     interface SsIconButton {
     }
     interface IntrinsicElements {
+        "ss-button-browse-libraries": SsButtonBrowseLibraries;
         "ss-button-create-listing": SsButtonCreateListing;
+        "ss-button-view-all-files": SsButtonViewAllFiles;
+        "ss-button-write-offer": SsButtonWriteOffer;
         "ss-container-inline": SsContainerInline;
         "ss-container-modal": SsContainerModal;
         "ss-icon-button": SsIconButton;
@@ -149,7 +199,10 @@ export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
+            "ss-button-browse-libraries": LocalJSX.SsButtonBrowseLibraries & JSXBase.HTMLAttributes<HTMLSsButtonBrowseLibrariesElement>;
             "ss-button-create-listing": LocalJSX.SsButtonCreateListing & JSXBase.HTMLAttributes<HTMLSsButtonCreateListingElement>;
+            "ss-button-view-all-files": LocalJSX.SsButtonViewAllFiles & JSXBase.HTMLAttributes<HTMLSsButtonViewAllFilesElement>;
+            "ss-button-write-offer": LocalJSX.SsButtonWriteOffer & JSXBase.HTMLAttributes<HTMLSsButtonWriteOfferElement>;
             "ss-container-inline": LocalJSX.SsContainerInline & JSXBase.HTMLAttributes<HTMLSsContainerInlineElement>;
             "ss-container-modal": LocalJSX.SsContainerModal & JSXBase.HTMLAttributes<HTMLSsContainerModalElement>;
             "ss-icon-button": LocalJSX.SsIconButton & JSXBase.HTMLAttributes<HTMLSsIconButtonElement>;
