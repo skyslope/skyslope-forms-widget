@@ -16,17 +16,11 @@ export class SsButtonBrowseLibraries {
    *
    */
   @Prop() readonly unstyled: boolean = false;
-  /**
-   *
-   */
-  @Prop() readonly openModal: boolean = true;
 
   @Listen('click', {})
   handleClick() {
-    if (this.openModal === false) {
-      window.skyslope.navigateToBrowseLibraries();
-    } else {
-      window.skyslope.navigateToBrowseLibraries();
+    window.skyslope.navigateToCreateListing();
+    if (!window.skyslope.openInline) {
       window.skyslope.openModal();
     }
   }

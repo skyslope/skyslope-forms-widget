@@ -1,4 +1,4 @@
-import { Component, Host, h, Prop, Env, Element } from '@stencil/core';
+import { Component, Host, h, Env, Element } from '@stencil/core';
 import { SkyslopePaths } from './types';
 import reinitializeGlobalScript from '../../globalScript';
 
@@ -8,11 +8,6 @@ import reinitializeGlobalScript from '../../globalScript';
   shadow: true,
 })
 export class SsContainerInline {
-  /**
-   * Identity provider for SSO
-   */
-  @Prop() readonly idp!: string;
-
   @Element() el: HTMLSsContainerInlineElement;
 
   private iframe() {
@@ -25,8 +20,8 @@ export class SsContainerInline {
 
   private navigateTo(path: string) {
     console.log('navigateTo 2');
-    this.iframe().src = `${Env.formsUrl}${path}?idp=${this.idp}`;
-    window.skyslope.path = path;
+    this.iframe().src = `${Env.formsUrl}${path}?idp=${window.skyslope.idp}`;
+    // window.skyslope.path = path;
   }
 
   connectedCallback() {
@@ -43,7 +38,7 @@ export class SsContainerInline {
     reinitializeGlobalScript();
   }
 
-  private idpQuerystring = window.skyslope.path.includes('?') ? `&idp=${this.idp}` : `?idp=${this.idp}`;
+  private idpQuerystring = window.skyslope.path.includes('?') ? `&idp=${window.skyslope.idp}` : `?idp=${window.skyslope.idp}`;
 
   render() {
     return (

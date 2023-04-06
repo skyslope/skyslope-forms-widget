@@ -1,20 +1,27 @@
 <!DOCTYPE html>
 <html dir="ltr" lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0" />
-    <title>Forms Widget Demo</title>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0"/>
+  <title>Forms Widget Demo</title>
 
-    <script type="module" src="/build/skyslope-forms-widget.esm.js"></script>
-    <script nomodule src="/build/skyslope-forms-widget.js"></script>
+  <script type="module" src="/build/skyslope-forms-widget.esm.js"></script>
+  <script nomodule src="/build/skyslope-forms-widget.js"></script>
 
-    <!--    <script type="module" src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>-->
-    <!--    <script nomodule src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>-->
-  </head>
-  <body>
-    <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
-    <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
-    <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
-    <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
-  </body>
+  <!--    <script type="module" src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>-->
+  <!--    <script nomodule src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>-->
+</head>
+<body>
+<ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
+<ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
+<ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
+<ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
+</body>
 </html>
+
+<script>
+  const init = () => window.skyslope.initialize({
+    idp: 'ure', // the idp for SSO
+  })
+  window.skyslope ? init() : window.skyslopeOnLoad = () => init()
+</script>

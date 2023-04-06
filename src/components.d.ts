@@ -7,26 +7,18 @@
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface SsButtonBrowseLibraries {
-        "openModal": boolean;
         "unstyled": boolean;
     }
     interface SsButtonCreateListing {
-        "openModal": boolean;
         "unstyled": boolean;
     }
     interface SsButtonViewAllFiles {
-        "openModal": boolean;
         "unstyled": boolean;
     }
     interface SsButtonWriteOffer {
-        "openModal": boolean;
         "unstyled": boolean;
     }
     interface SsContainerInline {
-        /**
-          * Identity provider for SSO
-         */
-        "idp": string;
     }
     interface SsContainerModal {
         /**
@@ -126,26 +118,18 @@ declare global {
 }
 declare namespace LocalJSX {
     interface SsButtonBrowseLibraries {
-        "openModal"?: boolean;
         "unstyled"?: boolean;
     }
     interface SsButtonCreateListing {
-        "openModal"?: boolean;
         "unstyled"?: boolean;
     }
     interface SsButtonViewAllFiles {
-        "openModal"?: boolean;
         "unstyled"?: boolean;
     }
     interface SsButtonWriteOffer {
-        "openModal"?: boolean;
         "unstyled"?: boolean;
     }
     interface SsContainerInline {
-        /**
-          * Identity provider for SSO
-         */
-        "idp": string;
     }
     interface SsContainerModal {
         /**

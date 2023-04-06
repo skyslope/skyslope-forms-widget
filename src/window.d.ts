@@ -1,4 +1,6 @@
-export interface OpenModalProps {
+import {SkySlopeWidget} from "./globalScript";
+
+export interface ModalProps {
   /**
    * Should the modal be open
    */
@@ -31,19 +33,26 @@ export interface OpenModalProps {
   };
 }
 
+export interface SkyslopeConfig {
+  idp: string;
+  openInline?: boolean;
+}
+
 declare global {
   interface Window {
-    skyslope: {
-      openModal: (config?: OpenModalProps) => void;
-      closeModal: () => void;
-      reload: () => void;
-      path: string;
-      navigateTo: (path: string) => void;
-      navigateToCreateListing: () => void;
-      navigateToCreateTransaction: () => void;
-      navigateToBrowseLibraries: () => void;
-      navigateToViewAllFiles: () => void;
-    };
+    skyslope?: SkySlopeWidget// & { onLoad?: () => void}
+    skyslopeOnLoad: () => void;
+    // skyslope: {
+    //   initialize: (config: SkyslopeConfig) => void;
+    //   openModal: (modalProps?: ModalProps) => void;
+    //   closeModal: () => void;
+    //   reload: () => void;
+    //   navigateTo: (path: string) => void;
+    //   navigateToCreateListing: () => void;
+    //   navigateToCreateTransaction: () => void;
+    //   navigateToBrowseLibraries: () => void;
+    //   navigateToViewAllFiles: () => void;
+    // };
   }
 }
 

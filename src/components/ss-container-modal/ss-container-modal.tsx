@@ -110,7 +110,7 @@ export class SsContainerModal {
               </div> : null}
               <div class={`modal-content ${this.roundedEdges ? 'rounded-edges' : ''}`}
                    style={this.styleOverrides.modalContent}>
-                <ss-container-inline idp='ure'></ss-container-inline>
+                <ss-container-inline></ss-container-inline>
               </div>
             </div>
           </div>

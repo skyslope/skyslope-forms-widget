@@ -1,15 +1,28 @@
-import {OpenModalProps} from "./window";
+import {ModalProps, SkyslopeConfig} from "./window";
 import {SkyslopePaths} from "./components/ss-container-inline/types";
 
-export default function () {
-  const openModal = ({
-                       open,
-                       shouldConstrainMaxWidth,
-                       showHeaderButtons,
-                       showOverlay,
-                       styleOverrides,
-                       roundedEdges
-                     }: OpenModalProps = {
+export class SkySlopeWidget {
+  private _path: string;
+  private _idp: string;
+  private _openInline: boolean;
+
+  constructor() {
+    this._path = '';
+  }
+
+  initialize = ({idp, openInline}: SkyslopeConfig) => {
+    this._idp = idp;
+    this._openInline = openInline;
+  };
+
+  openModal = ({
+              open,
+              shouldConstrainMaxWidth,
+              showHeaderButtons,
+              showOverlay,
+              styleOverrides,
+              roundedEdges
+            }: ModalProps = {
     open: true,
     shouldConstrainMaxWidth: true,
     roundedEdges: true,
@@ -17,6 +30,10 @@ export default function () {
     showOverlay: true,
     showHeaderButtons: true
   }) => {
+    if(this._idp == null) {
+      throw new Error('idp not set')
+    }
+
     const skyslopeForms = document.createElement('ss-container-modal');
     skyslopeForms.open = open;
     skyslopeForms.shouldConstrainMaxWidth = shouldConstrainMaxWidth;
@@ -28,7 +45,7 @@ export default function () {
     document.body.appendChild(skyslopeForms);
   };
 
-  const closeModal = () => {
+  closeModal = () => {
     const skyslopeForms = document.querySelector('ss-container-modal');
 
     if (skyslopeForms) {
@@ -36,23 +53,35 @@ export default function () {
     }
   };
 
-  const navigateTo = (path) => {
+  navigateTo = (path) => {
     console.log('navigateTo 1')
 
-    window.skyslope.path = path;
+    this._path = path;
+  }
+  reload= () => {
+    // searches for any rendered inline containers, calls refresh() on them
+    // const inlineContainer = document.querySelector('ss-container-inline');
+  };
+  navigateToCreateTransaction= () => this.navigateTo(SkyslopePaths.CreateTransaction);
+  navigateToCreateListing= () => this.navigateTo(SkyslopePaths.CreateListing);
+  navigateToBrowseLibraries= () => this.navigateTo(SkyslopePaths.BrowseLibraries);
+  navigateToViewAllFiles= () =>this. navigateTo(SkyslopePaths.ViewFiles);
+
+  get openInline(): boolean {
+    return this._openInline;
   }
 
-  window.skyslope = {
-    openModal,
-    closeModal,
-    path: window?.skyslope?.path ?? '',
-    // If skyslope-container-inline is rendered, the below functions are overwritten
-    reload: () => {
-    },
-    navigateTo,
-    navigateToCreateTransaction: () => navigateTo(SkyslopePaths.CreateTransaction),
-    navigateToCreateListing: () => navigateTo(SkyslopePaths.CreateListing),
-    navigateToBrowseLibraries: () => navigateTo(SkyslopePaths.BrowseLibraries),
-    navigateToViewAllFiles: () => navigateTo(SkyslopePaths.ViewFiles),
-  };
+  get idp(): string {
+    return this._idp;
+  }
+
+  get path(): string {
+    return this._path;
+  }
+}
+
+
+export default function () {
+  window.skyslope = new SkySlopeWidget();
+  window.skyslopeOnLoad?.();
 }

@@ -16,17 +16,11 @@ export class SsButtonViewAllFiles {
    *
    */
   @Prop() readonly unstyled: boolean = false;
-  /**
-   *
-   */
-  @Prop() readonly openModal: boolean = true;
 
   @Listen('click', {})
   handleClick() {
-    if (this.openModal === false) {
-      window.skyslope.navigateToViewAllFiles();
-    } else {
-      window.skyslope.navigateToViewAllFiles();
+    window.skyslope.navigateToCreateListing();
+    if (!window.skyslope.openInline) {
       window.skyslope.openModal();
     }
   }

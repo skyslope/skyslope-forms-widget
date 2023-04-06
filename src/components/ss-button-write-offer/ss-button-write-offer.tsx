@@ -19,17 +19,11 @@ export class SsButtonWriteOffer {
    *
    */
   @Prop() readonly unstyled: boolean = false;
-  /**
-   *
-   */
-  @Prop() readonly openModal: boolean = true;
 
   @Listen('click', {})
   handleClick() {
-    if (this.openModal === false) {
-      window.skyslope.navigateToCreateTransaction();
-    } else {
-      window.skyslope.navigateToCreateTransaction();
+    window.skyslope.navigateToCreateListing();
+    if (!window.skyslope.openInline) {
       window.skyslope.openModal();
     }
   }
