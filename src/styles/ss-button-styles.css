@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+.ss-button-styled {
+  align-items: center;
+  background-color: #f9f9f9;
+  border: 2px solid #0059da;
+  border-radius: 20px;
+  box-sizing: border-box;
+  color: #0059da;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 16px;
+  justify-content: center;
+  min-width: 64px;
+  padding: 10px 24px;
+  text-transform: none;
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0ms, box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0ms, border 0.25s;
+  user-select: none;
+}
+
+.ss-icons {
+  fill: #0059da;
+  margin-right: 8px;
+}

@@ -1,6 +1,6 @@
 export enum SkyslopePaths {
-  CreateListing = 'create',
-  CreateTransaction = 'create',
-  BrowseLibraries = 'create',
+  CreateListing = 'create?representationType=seller',
+  CreateTransaction = 'create?representationType=buyer',
+  BrowseLibraries = 'browse-libraries',
   ViewFiles = '',
 }

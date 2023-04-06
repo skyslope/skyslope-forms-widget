@@ -23,18 +23,18 @@ export interface OpenModalProps {
    * Classes override for custom styling
    */
   styleOverrides?: {
-    modalWrapper?: { [key: string]: string; };
-    modalOverlay?: { [key: string]: string; };
-    modalHeader?: { [key: string]: string; };
-    modalContent?: { [key: string]: string; };
-    maxWidthContainer?: { [key: string]: string; };
-  }
+    modalWrapper?: { [key: string]: string };
+    modalOverlay?: { [key: string]: string };
+    modalHeader?: { [key: string]: string };
+    modalContent?: { [key: string]: string };
+    maxWidthContainer?: { [key: string]: string };
+  };
 }
 
 declare global {
   interface Window {
     skyslope: {
-      openModal: (config: OpenModalProps) => void;
+      openModal: (config?: OpenModalProps) => void;
       closeModal: () => void;
       reload: () => void;
       path: string;
@@ -43,7 +43,7 @@ declare global {
       navigateToCreateTransaction: () => void;
       navigateToBrowseLibraries: () => void;
       navigateToViewAllFiles: () => void;
-    }
+    };
   }
 }
 
