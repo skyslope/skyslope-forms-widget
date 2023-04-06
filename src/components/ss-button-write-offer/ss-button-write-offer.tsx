@@ -22,7 +22,7 @@ export class SsButtonWriteOffer {
 
   @Listen('click', {})
   handleClick() {
-    window.skyslope.widget.navigateToCreateListing();
+    window.skyslope.widget.navigateToCreateTransaction();
     if (!window.skyslope.widget.openInline) {
       window.skyslope.widget.openModal();
     }

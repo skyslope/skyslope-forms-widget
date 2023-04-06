@@ -7,6 +7,8 @@ export class SkySlopeWidget {
   private _path: string;
   private _idp: string;
   private _openInline: boolean;
+  private _reloadCallback: () => void;
+  private _navigateCallback: (path: string) => void;
 
   constructor() {
     this._path = '';
@@ -18,13 +20,13 @@ export class SkySlopeWidget {
   };
 
   openModal = ({
-              open,
-              shouldConstrainMaxWidth,
-              showHeaderButtons,
-              showOverlay,
-              styleOverrides,
-              roundedEdges
-            }: ModalProps = {
+                 open,
+                 shouldConstrainMaxWidth,
+                 showHeaderButtons,
+                 showOverlay,
+                 styleOverrides,
+                 roundedEdges
+               }: ModalProps = {
     open: true,
     shouldConstrainMaxWidth: true,
     roundedEdges: true,
@@ -32,7 +34,7 @@ export class SkySlopeWidget {
     showOverlay: true,
     showHeaderButtons: true
   }) => {
-    if(this._idp == null) {
+    if (this._idp == null) {
       throw new Error('idp not set')
     }
 
@@ -57,17 +59,30 @@ export class SkySlopeWidget {
 
   navigateTo = (path) => {
     console.log('navigateTo 1')
-
     this._path = path;
+    this._navigateCallback?.(path)
   }
-  reload= () => {
-    // searches for any rendered inline containers, calls refresh() on them
-    // const inlineContainer = document.querySelector('ss-container-inline');
+  reload = () => {
+    this._reloadCallback?.();
   };
-  navigateToCreateTransaction= () => this.navigateTo(SkyslopePaths.CreateTransaction);
-  navigateToCreateListing= () => this.navigateTo(SkyslopePaths.CreateListing);
-  navigateToBrowseLibraries= () => this.navigateTo(SkyslopePaths.BrowseLibraries);
-  navigateToViewAllFiles= () =>this. navigateTo(SkyslopePaths.ViewFiles);
+  navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
+  navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
+  navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
+  navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
+
+  registerReload = (reloadCallback: () => void) => {
+    if(this._reloadCallback) {
+      throw new Error('Reload Callback is already defined. Is more than one inline container running?')
+    }
+    this._reloadCallback = reloadCallback;
+  }
+
+  registerNavigateTo = (navigateCallback: (path: string) => void) => {
+    if(this._navigateCallback) {
+      throw new Error('Navigate Callback is already defined. Is more than one inline container running?')
+    }
+    this._navigateCallback = navigateCallback;
+  }
 
   get openInline(): boolean {
     return this._openInline;
@@ -84,7 +99,7 @@ export class SkySlopeWidget {
 
 
 export default function () {
-  if(!window.skyslope) window.skyslope = {};
+  if (!window.skyslope) window.skyslope = {};
   const onLoad = window.skyslope?.onLoad;
   window.skyslope.widget = new SkySlopeWidget();
   onLoad?.();

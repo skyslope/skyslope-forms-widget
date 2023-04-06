@@ -19,7 +19,7 @@ export class SsButtonBrowseLibraries {
 
   @Listen('click', {})
   handleClick() {
-    window.skyslope.widget.navigateToCreateListing();
+    window.skyslope.widget.navigateToBrowseLibraries();
     if (!window.skyslope.widget.openInline) {
       window.skyslope.widget.openModal();
     }

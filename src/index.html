@@ -16,12 +16,14 @@
 <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
 <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
 <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
+<!--<ss-container-inline style="height: 1000px;"/>-->
 </body>
 </html>
 
 <script>
   const init = () => window.skyslope.widget.initialize({
     idp: 'ure', // the idp for SSO
+    // openInline: true
   })
   window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
 </script>
