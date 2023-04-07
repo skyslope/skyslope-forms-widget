@@ -1,6 +1,6 @@
 # SkySlope Forms Widget  
 
-The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into their own web applications, providing easy access to Skyslope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.
+The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into their own web applications, providing easy access to SkySlope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.
 
 ### Implementation
 
@@ -9,8 +9,8 @@ _Before starting: Please contact SkySlope engineering to configure SSO for your 
 To implement the SkySlope Forms Widget, add the following script tags to your index.html:
 
 ```javascript
-    <script type="module" src="https://cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>  
-    <script nomodule src="https://cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>
+<script type="module" src="https://cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>  
+<script nomodule src="https://cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>
 ```
 
 Then, in your app or in your index.html, add the following script:  
@@ -58,7 +58,7 @@ window.skyslope.widget.openModal({
 ```
 
 ### Custom Usage with Inline Container
-If you do not want to open a modal in your app and would instead like to customize the placement of the widget, follow the instructions below;.
+If you do not want to open a modal in your app and would instead like to customize the placement of the widget, follow the instructions below:
 
 To use the inline component instead of the openModal() function, you will need to add the following ss-container-inline web component to your HTML:
 ```html
