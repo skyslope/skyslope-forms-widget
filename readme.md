@@ -1,75 +1,120 @@
-[![Built With Stencil](https://img.shields.io/badge/-Built%20With%20Stencil-16161d.svg?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE5LjIuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MTIgNTEyOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI%2BCjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI%2BCgkuc3Qwe2ZpbGw6I0ZGRkZGRjt9Cjwvc3R5bGU%2BCjxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik00MjQuNywzNzMuOWMwLDM3LjYtNTUuMSw2OC42LTkyLjcsNjguNkgxODAuNGMtMzcuOSwwLTkyLjctMzAuNy05Mi43LTY4LjZ2LTMuNmgzMzYuOVYzNzMuOXoiLz4KPHBhdGggY2xhc3M9InN0MCIgZD0iTTQyNC43LDI5Mi4xSDE4MC40Yy0zNy42LDAtOTIuNy0zMS05Mi43LTY4LjZ2LTMuNkgzMzJjMzcuNiwwLDkyLjcsMzEsOTIuNyw2OC42VjI5Mi4xeiIvPgo8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNDI0LjcsMTQxLjdIODcuN3YtMy42YzAtMzcuNiw1NC44LTY4LjYsOTIuNy02OC42SDMzMmMzNy45LDAsOTIuNywzMC43LDkyLjcsNjguNlYxNDEuN3oiLz4KPC9zdmc%2BCg%3D%3D&colorA=16161d&style=flat-square)](https://stenciljs.com)
+# SkySlope Forms Widget  
 
-# Stencil Component Starter
+The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into their own web applications, providing easy access to Skyslope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.
 
-This is a starter project for building a standalone Web Component using Stencil.
+### Implementation
 
-Stencil is also great for building entire apps. For that, use the [stencil-app-starter](https://github.com/ionic-team/stencil-app-starter) instead.
+_Before starting: Please contact SkySlope engineering to configure SSO for your company._
 
-# Stencil
+To implement the SkySlope Forms Widget, add the following script tags to your index.html:
 
-Stencil is a compiler for building fast web apps using Web Components.
-
-Stencil combines the best concepts of the most popular frontend frameworks into a compile-time rather than run-time tool.  Stencil takes TypeScript, JSX, a tiny virtual DOM layer, efficient one-way data binding, an asynchronous rendering pipeline (similar to React Fiber), and lazy-loading out of the box, and generates 100% standards-based Web Components that run in any browser supporting the Custom Elements v1 spec.
-
-Stencil components are just Web Components, so they work in any major framework or with no framework at all.
-
-## Getting Started
-
-To start building a new web component using Stencil, clone this repo to a new directory:
-
-```bash
-git clone https://github.com/ionic-team/stencil-component-starter.git my-component
-cd my-component
-git remote rm origin
+```javascript
+    <script type="module" src="https://cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>  
+    <script nomodule src="https://cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script>
 ```
 
-and run:
-
-```bash
-npm install
-npm start
+Then, in your app or in your index.html, add the following script:  
+```javascript
+<script>
+  const init = () => window.skyslope.widget.initialize({
+    idp: 'myIDP' // the idp for SSO
+  })
+  window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
+</script>
 ```
 
-To build the component for production, run:
+### Usage with Modal
+The SkySlope Forms Widget provides the following API on the window.skyslope.widget object:
 
-```bash
-npm run build
+- `openModal`: opens a modal with SkySlope Forms loaded inside an iframe. This injects a modal [web component](https://developer.mozilla.org/en-US/docs/Web/Web_Components) into the body of the page.
+- `closeModal`: closes the modal.
+- `reload`: reloads the iframe.
+- `navigateTo(path: string)`: navigates to a different path within the Forms app.
+- `navigateToCreateTransaction`: navigates to the Create Transaction page.
+- `navigateToCreateListing`: navigates to the Create Listing page.
+- `navigateToBrowseLibraries`: navigates to the Browse Libraries page.
+- `navigateToViewAllFiles`: navigates to the View All Files page.
+  
+The modal is configurable through the openModal function. For example:
+```javascript
+window.skyslope.widget.openModal({
+  open: true,
+  roundedEdges: true,
+  shouldConstrainMaxWidth: true,
+  showHeaderButtons: true,
+  showOverlay: true,
+  styleOverrides: {
+    modalWrapper: {
+      backgroundColor: 'black',
+      color: 'white',
+    },
+    modalHeader: {},
+    modalOverlay: {},
+    modalHeader: {},
+    modalContent: {},
+    maxWidthContainer: {},
+  },
+});
 ```
 
-To run the unit tests for the components, run:
+### Custom Usage with Inline Container
+If you do not want to open a modal in your app and would instead like to customize the placement of the widget, follow the instructions below;.
 
-```bash
-npm test
+To use the inline component instead of the openModal() function, you will need to add the following ss-container-inline web component to your HTML:
+```html
+<ss-container-inline style="height: 1000px; /*... add any other styling here*/"/>
 ```
 
-Need help? Check out our docs [here](https://stenciljs.com/docs/my-first-component).
+Add the `openInline: true` option to the initialize() function, as shown below:
 
+```javascript
+const init = () => window.skyslope.widget.initialize({
+  idp: 'myIdp', // the idp for SSO
+  openInline: true
+})
+```
 
-## Naming Components
+This will display the Skyslope Forms widget within your application, without opening a modal.
 
-When creating new component tags, we recommend _not_ using `stencil` in the component name (ex: `<stencil-datepicker>`). This is because the generated component has little to nothing to do with Stencil; it's just a web component!
+Additionally, all navigation and refresh functions work as expected.
 
-Instead, use a prefix that fits your company or any name for a group of related components. For example, all of the Ionic generated web components use the prefix `ion`.
+### Pre-made buttons
+There are four pre-made button web components that you can use to interact with the Skyslope Forms widget:  
+By using these pre-made buttons, you can easily integrate Skyslope Forms functionality into your application without having to build your own UI components.
 
+- `<ss-button-create-listing>`: Opens the "Create Listing" page when clicked.
+- `<ss-button-write-offer>`: Opens the "Create Transaction" page when clicked.
+- `<ss-button-browse-libraries>`: Opens the "Browse Libraries" page when clicked.
+- `<ss-button-view-all-files>`: Opens the "View All Files" page when clicked.
 
-## Using this component
+To use these buttons, you can add them anywhere in your HTML like so:
+```javascript
+<ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
+<ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
+<ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
+<ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
+```
 
-There are three strategies we recommend for using web components built with Stencil.
+#### Unstyled Prop
+The unstyled prop is an optional prop that can be passed to the button web components. When this prop is set to true, the button will be rendered without any default styles applied. This allows developers to fully customize the appearance of the button using their own CSS styles.
 
-The first step for all three of these strategies is to [publish to NPM](https://docs.npmjs.com/getting-started/publishing-npm-packages).
+For example, to create a custom styled ss-button-create-listing component, you could define the following CSS rules:
+```css
+.custom-button {
+  background-color: blue;
+  color: white;
+  border-radius: 5px;
+  padding: 10px;
+  font-size: 16px;
+}
 
-### Script tag
+.custom-button:hover {
+  background-color: darkblue;
+}
+```
 
-- Put a script tag similar to this `<script type='module' src='https://unpkg.com/my-component@0.0.1/dist/my-component.esm.js'></script>` in the head of your index.html
-- Then you can use the element anywhere in your template, JSX, html etc
-
-### Node Modules
-- Run `npm install my-component --save`
-- Put a script tag similar to this `<script type='module' src='node_modules/my-component/dist/my-component.esm.js'></script>` in the head of your index.html
-- Then you can use the element anywhere in your template, JSX, html etc
-
-### In a stencil-starter app
-- Run `npm install my-component --save`
-- Add an import to the npm packages `import my-component;`
-- Then you can use the element anywhere in your template, JSX, html etc
+Then, in your HTML, you can use the ss-button-create-listing component with the unstyled prop set to true and the class attribute set to custom-button:
+```
+<ss-button-create-listing id="create-listing-btn" unstyled="true" class="custom-button">Write a Listing</ss-button-create-listing>
+```
+This will render a blue button with white text and rounded corners, with the custom styles applied. When the button is hovered over, it will turn dark blue.
