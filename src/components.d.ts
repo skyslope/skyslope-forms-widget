@@ -18,6 +18,8 @@ export namespace Components {
     interface SsButtonWriteOffer {
         "unstyled": boolean;
     }
+    interface SsContainedWidget {
+    }
     interface SsContainerInline {
     }
     interface SsContainerModal {
@@ -88,6 +90,12 @@ declare global {
         prototype: HTMLSsButtonWriteOfferElement;
         new (): HTMLSsButtonWriteOfferElement;
     };
+    interface HTMLSsContainedWidgetElement extends Components.SsContainedWidget, HTMLStencilElement {
+    }
+    var HTMLSsContainedWidgetElement: {
+        prototype: HTMLSsContainedWidgetElement;
+        new (): HTMLSsContainedWidgetElement;
+    };
     interface HTMLSsContainerInlineElement extends Components.SsContainerInline, HTMLStencilElement {
     }
     var HTMLSsContainerInlineElement: {
@@ -111,6 +119,7 @@ declare global {
         "ss-button-create-listing": HTMLSsButtonCreateListingElement;
         "ss-button-view-all-files": HTMLSsButtonViewAllFilesElement;
         "ss-button-write-offer": HTMLSsButtonWriteOfferElement;
+        "ss-contained-widget": HTMLSsContainedWidgetElement;
         "ss-container-inline": HTMLSsContainerInlineElement;
         "ss-container-modal": HTMLSsContainerModalElement;
         "ss-icon-button": HTMLSsIconButtonElement;
@@ -128,6 +137,8 @@ declare namespace LocalJSX {
     }
     interface SsButtonWriteOffer {
         "unstyled"?: boolean;
+    }
+    interface SsContainedWidget {
     }
     interface SsContainerInline {
     }
@@ -182,6 +193,7 @@ declare namespace LocalJSX {
         "ss-button-create-listing": SsButtonCreateListing;
         "ss-button-view-all-files": SsButtonViewAllFiles;
         "ss-button-write-offer": SsButtonWriteOffer;
+        "ss-contained-widget": SsContainedWidget;
         "ss-container-inline": SsContainerInline;
         "ss-container-modal": SsContainerModal;
         "ss-icon-button": SsIconButton;
@@ -195,6 +207,7 @@ declare module "@stencil/core" {
             "ss-button-create-listing": LocalJSX.SsButtonCreateListing & JSXBase.HTMLAttributes<HTMLSsButtonCreateListingElement>;
             "ss-button-view-all-files": LocalJSX.SsButtonViewAllFiles & JSXBase.HTMLAttributes<HTMLSsButtonViewAllFilesElement>;
             "ss-button-write-offer": LocalJSX.SsButtonWriteOffer & JSXBase.HTMLAttributes<HTMLSsButtonWriteOfferElement>;
+            "ss-contained-widget": LocalJSX.SsContainedWidget & JSXBase.HTMLAttributes<HTMLSsContainedWidgetElement>;
             "ss-container-inline": LocalJSX.SsContainerInline & JSXBase.HTMLAttributes<HTMLSsContainerInlineElement>;
             "ss-container-modal": LocalJSX.SsContainerModal & JSXBase.HTMLAttributes<HTMLSsContainerModalElement>;
             "ss-icon-button": LocalJSX.SsIconButton & JSXBase.HTMLAttributes<HTMLSsIconButtonElement>;

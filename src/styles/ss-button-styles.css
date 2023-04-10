@@ -17,6 +17,8 @@
   text-transform: none;
   transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0ms, box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0ms, border 0.25s;
   user-select: none;
+  margin-bottom: 16px;
+  width: 250px;
 }
 
 .ss-icons {
