@@ -25,3 +25,7 @@
   fill: #0059da;
   margin-right: 8px;
 }
+
+.hide-icons {
+  display: none;
+}
