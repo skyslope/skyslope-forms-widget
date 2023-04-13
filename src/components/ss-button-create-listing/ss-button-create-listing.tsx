@@ -1,7 +1,7 @@
 import { Component, Host, h, Prop, Listen } from '@stencil/core';
 
-const CreateListingSvg = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="ss-icons" height="18" viewBox="0 96 960 960" width="18">
+const CreateListingSvg = ({ buttonClass }: { buttonClass: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" class={buttonClass} height="18" viewBox="0 96 960 960" width="18">
     <path class="ss-icons" d="M160 936V456l320-240 320 240v480H560V656H400v280H160Z" />
   </svg>
 );
@@ -29,7 +29,7 @@ export class SsButtonCreateListing {
     return (
       <Host>
         <button class={this.unstyled ? '' : 'ss-button-styled'}>
-          <CreateListingSvg />
+          <CreateListingSvg buttonClass={this.unstyled ? 'hide-icons' : 'ss-icons'} />
           <slot></slot>
         </button>
       </Host>
