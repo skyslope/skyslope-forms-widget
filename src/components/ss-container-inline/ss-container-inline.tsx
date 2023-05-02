@@ -10,8 +10,8 @@ export class SsContainerInline {
   @Element() el: HTMLSsContainerInlineElement;
 
   private getUrl() {
-    const idpQuerystring = window.skyslope.widget.path.includes('?') ? `&idp=${window.skyslope.widget.idp}` : `?idp=${window.skyslope.widget.idp}`;
-    return `${Env.formsUrl}${window.skyslope.widget.path}${idpQuerystring}`;
+    // const idpQuerystring = window.skyslope.widget.path.includes('?') ? `&idp=${window.skyslope.widget.idp}` : `?idp=${window.skyslope.widget.idp}`;
+    return `${Env.formsUrl}${window.skyslope.widget.path}`;
   }
 
   private iframe = () => (this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement);
