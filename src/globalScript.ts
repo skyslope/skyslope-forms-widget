@@ -58,7 +58,6 @@ export class SkySlopeWidget {
   };
 
   navigateTo = (path) => {
-    console.log('navigateTo 1')
     this._path = path;
     this._navigateCallback?.(path)
   }

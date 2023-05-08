@@ -4,7 +4,7 @@ The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into th
 
 ### Implementation
 
-_Before starting: Please contact SkySlope engineering to configure SSO for your company._
+_Before starting: If using SSO, please contact SkySlope engineering to configure SSO for your company._
 
 To implement the SkySlope Forms Widget, add the following script tags to your index.html:
 
@@ -17,7 +17,7 @@ Then, in your app or in your index.html, add the following script:
 ```javascript
 <script>
   const init = () => window.skyslope.widget.initialize({
-    idp: 'myIDP' // the idp for SSO
+    idp: 'myIDP' // the idp for SSO, if using
   })
   window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
 </script>

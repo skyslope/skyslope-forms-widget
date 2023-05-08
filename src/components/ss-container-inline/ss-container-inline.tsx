@@ -10,8 +10,8 @@ export class SsContainerInline {
   @Element() el: HTMLSsContainerInlineElement;
 
   private getUrl() {
-    // const idpQuerystring = window.skyslope.widget.path.includes('?') ? `&idp=${window.skyslope.widget.idp}` : `?idp=${window.skyslope.widget.idp}`;
-    return `${Env.formsUrl}${window.skyslope.widget.path}`;
+    const idpQuerystring = `${(window.skyslope.widget.idp == null ? '' : `${window.skyslope.widget.path.includes('?') ? `&` : `?`}idp=${window.skyslope.widget.idp}`)}`;
+    return `${Env.formsUrl}${window.skyslope.widget.path}${idpQuerystring}`;
   }
 
   private iframe = () => (this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement);
@@ -21,7 +21,6 @@ export class SsContainerInline {
   };
 
   private navigateTo = () => {
-    console.log('navigateTo 2');
     this.iframe().src = this.getUrl();
   };
 
