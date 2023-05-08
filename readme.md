@@ -50,7 +50,6 @@ window.skyslope.widget.openModal({
     },
     modalHeader: {},
     modalOverlay: {},
-    modalHeader: {},
     modalContent: {},
     maxWidthContainer: {},
   },

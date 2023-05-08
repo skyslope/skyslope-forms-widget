@@ -4,28 +4,312 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0" />
     <title>Forms Widget Demo</title>
-
     <script type="module" src="/build/skyslope-forms-widget.esm.js"></script>
     <script nomodule src="/build/skyslope-forms-widget.js"></script>
 
     <!-- <script type="module" src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script> -->
     <!-- <script nomodule src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script> -->
+    <script type="text/javascript" language="javascript">
+      const init = () =>
+        window.skyslope.widget.initialize({
+          idp: 'ure', // the idp for SSO
+          // openInline: true
+        });
+      window.skyslope?.widget ? init() : (window.skyslope = { onLoad: () => init() });
+
+      function openSquare() {
+        window.skyslope.widget.openModal({
+          roundedEdges: false,
+        });
+      }
+
+      function openNoBD() {
+        window.skyslope.widget.openModal({
+          showOverlay: false,
+        });
+      }
+
+      function openCustomClose() {
+        window.skyslope.widget.openModal({
+          showHeaderButtons: false,
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = 'Close SkySlope';
+        closeBtn.style = 'position: fixed; bottom: 24px; left: calc(50% - 24px); z-index: 9999;';
+        closeBtn.onclick = function () {
+          window.skyslope.widget.closeModal();
+          this.remove();
+        };
+        window.document.body.appendChild(closeBtn);
+      }
+
+      function openPositioned() {
+        window.skyslope.widget.openModal({
+          roundedEdges: false,
+          showHeaderButtons: false,
+          showOverlay: false,
+          styleOverrides: {
+            modalWrapper: {
+              top: '70px',
+              left: '300px',
+              right: 0,
+              bottom: 0,
+              zIndex: 9,
+            },
+            modalHeader: {},
+            modalOverlay: {},
+            modalContent: {
+              boxShadow: 'none',
+              margin: 0,
+              height: '100%',
+              width: 'calc(100% - 300px)',
+              border: '1px solid #e1e7f1',
+            },
+            maxWidthContainer: {
+              maxWidth: '100%',
+            },
+          },
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = 'Close SkySlope';
+        closeBtn.style = 'position: fixed; top: 14px; right: 200px; z-index: 20;';
+        closeBtn.onclick = function () {
+          window.skyslope.widget.closeModal();
+          this.remove();
+        };
+        window.document.body.appendChild(closeBtn);
+      }
+    </script>
+    <style>
+      :root {
+        font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        font-weight: 400;
+
+        color-scheme: light dark;
+        color: rgba(255, 255, 255, 0.87);
+        background-color: #242424;
+
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      h1,
+      p {
+        margin: 0;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        place-items: center;
+        min-width: 320px;
+        min-height: 100vh;
+        background-color: #f8f9ff;
+        color: #496079;
+      }
+
+      button {
+        border-radius: 8px;
+        border: 1px solid #0a2642;
+        padding: 0.6em 1.2em;
+        font-size: 1em;
+        font-weight: 500;
+        font-family: inherit;
+        background-color: white;
+        color: #0a2642;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background-color: #ebf1f6;
+      }
+
+      header {
+        background-color: white;
+        box-shadow: 0px 12px 17px 2px rgba(0, 89, 218, 0.04), 0px 5px 22px 4px rgba(0, 89, 218, 0.03);
+        height: 70px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        display: flex;
+        padding: 0 32px;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 10;
+      }
+
+      nav {
+        background-color: #fff;
+        border-right: 1px solid #e1e7f1;
+        position: fixed;
+        left: 0;
+        top: 71px;
+        bottom: 0;
+        width: 300px;
+      }
+
+      ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        align-items: flex-start;
+        font-size: 22px;
+        margin-top: 40px;
+      }
+
+      a {
+        color: #8ca0b3;
+        text-decoration: none;
+      }
+      a:hover {
+        color: #496079;
+      }
+      li:first-child a {
+        color: #496079;
+      }
+
+      section {
+        position: fixed;
+        left: 301px;
+        right: 0;
+        bottom: 0;
+        top: 71px;
+        overflow: auto;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        text-align: left;
+        margin-bottom: 32px;
+      }
+
+      p {
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        align-content: flex-start;
+      }
+
+      .card {
+        background-color: #fff;
+        border-radius: 8px;
+        border: 1px solid #e1e7f1;
+        display: flex;
+        flex-direction: column;
+        padding: 16px;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .button1 button {
+        background-color: #3ba06c;
+        border-radius: 0;
+        border: none;
+        color: white;
+      }
+
+      .button1 button:hover {
+        background-color: #308252;
+      }
+
+      .button2 button {
+        border: none;
+        color: #fa4515;
+        font-weight: bold;
+        background-color: transparent;
+        padding: 12px 16px;
+      }
+
+      .button2 button:hover {
+        background-color: rgba(247, 136, 18, 0.25);
+      }
+
+      .button3 button {
+        color: #521687;
+        border: 2px solid #521687;
+        font-weight: bold;
+        background-color: white;
+        padding: 8px;
+        border-radius: 100px;
+      }
+
+      .button3 button:hover {
+        background-color: #efdeff;
+      }
+
+      .contained-widget .ss-widget-full {
+        background-color: white;
+        box-shadow: 0px 12px 17px 2px rgba(0, 89, 218, 0.04), 0px 5px 22px 4px rgba(0, 89, 218, 0.03);
+        border-radius: 12px;
+      }
+    </style>
   </head>
   <body>
-    <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
-    <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
-    <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
-    <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
-    <ss-contained-widget></ss-contained-widget>
-    <!--<ss-container-inline style="height: 1000px;"/>-->
+    <main>
+      <header>
+        <h2>Sample<b>CRM</b></h2>
+        <p>User</p>
+      </header>
+      <nav>
+        <ul>
+          <li><a href="/">Demo</a></li>
+          <li><a href="https://github.com/skyslope/skyslope-forms-widget/blob/main/readme.md" target="_blank">Widget Documentation</a></li>
+          <li><a href="https://skyslope.com/" target="_blank">SkySlope</a></li>
+          <li><a href="https://skyslope.com/forms-login/" target="_blank">Forms</a></li>
+          <li><a href="https://skyslope.com/offer-management-login/" target="_blank">Offer Management</a></li>
+          <li><a href="https://breeze.skyslope.com/login/email" target="_blank">Breeze</a></li>
+          <li><a href="https://support.skyslope.com/hc/en-us" target="_blank">Support</a></li>
+        </ul>
+      </nav>
+
+      <section>
+        <h1>Welcome to the SkySlope Forms Widget Demo!</h1>
+        <div class="cards">
+          <div class="card">
+            <p>One way to use the widget is with any of our premade buttons</p>
+            <div>
+              <ss-button-create-listing>Write a Listing</ss-button-create-listing>
+              <ss-button-write-offer>Write an Offer</ss-button-write-offer>
+              <ss-button-browse-libraries>Browse Libraries</ss-button-browse-libraries>
+              <ss-button-view-all-files>View All Files</ss-button-view-all-files>
+            </div>
+          </div>
+          <div class="card">
+            <p>They can also be styled to fit any site</p>
+            <ss-button-create-listing unstyled="true" class="button1">Write a Listing</ss-button-create-listing>
+            <ss-button-write-offer unstyled="true" class="button2">Offer Time!</ss-button-write-offer>
+            <ss-button-view-all-files unstyled="true" class="button3">SkySlope Forms</ss-button-view-all-files>
+          </div>
+          <div class="card">
+            <p>The embedded experience can be customized to match your experience</p>
+            <button onclick="openSquare()">Square Edges</button>
+            <button onclick="openNoBD()">No Backdrop</button>
+            <button onclick="openCustomClose()">Custom Close button</button>
+            <button onclick="openPositioned()">Positioned Manually</button>
+          </div>
+          <div class="card">
+            <p>We also have single widget that can easily be dropped anywhere</p>
+            <ss-contained-widget class="contained-widget"></ss-contained-widget>
+          </div>
+        </div>
+      </section>
+    </main>
   </body>
 </html>
-
-<script>
-  const init = () =>
-    window.skyslope.widget.initialize({
-      idp: 'ure', // the idp for SSO
-      // openInline: true
-    });
-  window.skyslope?.widget ? init() : (window.skyslope = { onLoad: () => init() });
-</script>
