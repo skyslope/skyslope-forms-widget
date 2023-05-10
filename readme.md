@@ -25,6 +25,13 @@ Then, in your app or in your index.html, add the following script:
 </script>
 ```
 
+#### Version-based implementation
+If you would like to use a specific version of the widget, you can specify the version in the script tag. For example:
+```javascript
+<script type="module" src="https://cdn.skyslope.com/skyslope-forms-widget/{version-from-package.json}/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>  
+<script nomodule src="https://cdn.skyslope.com/skyslope-forms-widget/latest/{version-from-package.json}/skyslope-forms-widgetcomponents.js"></script>
+```
+
 ### Usage with Modal
 The SkySlope Forms Widget provides the following API on the window.skyslope.widget object:
 
