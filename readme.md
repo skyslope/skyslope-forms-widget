@@ -32,6 +32,15 @@ If you would like to use a specific version of the widget, you can specify the v
 <script nomodule src="https://cdn.skyslope.com/skyslope-forms-widget/latest/{version-from-package.json}/skyslope-forms-widgetcomponents.js"></script>
 ```
 
+#### No IDP Implementation
+If you are not using SSO, you can initialize the widget without an IDP:
+```javascript
+<script>
+  const init = () => window.skyslope.widget.initialize();
+  window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
+</script>
+```
+
 ### Usage with Modal
 The SkySlope Forms Widget provides the following API on the window.skyslope.widget object:
 
