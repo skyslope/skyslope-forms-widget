@@ -34,10 +34,6 @@ export class SkySlopeWidget {
     showOverlay: true,
     showHeaderButtons: true
   }) => {
-    if (this._idp == null) {
-      throw new Error('idp not set')
-    }
-
     const skyslopeForms = document.createElement('ss-container-modal');
     skyslopeForms.open = open;
     skyslopeForms.shouldConstrainMaxWidth = shouldConstrainMaxWidth;
