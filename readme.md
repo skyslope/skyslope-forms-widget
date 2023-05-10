@@ -2,9 +2,11 @@
 
 The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into their own web applications, providing easy access to SkySlope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.
 
+Demo Site: https://skyslope-widget-demo.netlify.app/
+
 ### Implementation
 
-_Before starting: If using SSO, please contact SkySlope engineering to configure SSO for your company._
+_Before starting: Please contact SkySlope Engineering to whitelist your site for framing. If using SSO, please contact SkySlope engineering to configure SSO for your company._
 
 To implement the SkySlope Forms Widget, add the following script tags to your index.html:
 
