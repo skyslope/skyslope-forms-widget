@@ -37,7 +37,7 @@ export class SsContainerInline {
   render() {
     return (
       <Host>
-        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={this.getUrl()} />
+        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={this.getUrl()} style={{backgroundColor: '#f4f8fc'}}/>
       </Host>
     );
   }
