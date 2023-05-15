@@ -1,7 +1,7 @@
 {
   "name": "skyslope-forms-widget",
   "version": "0.0.4",
-  "description": "Stencil Component Starter",
+  "description": "Skyslope Forms Widget",
   "main": "dist/index.cjs.js",
   "module": "dist/index.js",
   "es2015": "dist/esm/index.mjs",
