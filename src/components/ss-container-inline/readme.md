@@ -5,13 +5,6 @@
 <!-- Auto Generated Below -->
 
 
-## Properties
-
-| Property           | Attribute | Description    | Type     | Default     |
-| ------------------ | --------- | -------------- | -------- | ----------- |
-| `idp` _(required)_ | `idp`     | The first name | `string` | `undefined` |
-
-
 ## Dependencies
 
 ### Used by
