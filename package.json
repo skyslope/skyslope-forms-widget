@@ -1,6 +1,6 @@
 {
   "name": "@skyslope/forms-widget",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Skyslope Forms Widget",
   "main": "dist/index.cjs.js",
   "module": "dist/index.js",
@@ -38,6 +38,7 @@
     "@types/node": "^16.18.11",
     "jest": "^27.5.1",
     "jest-cli": "^27.5.1",
+    "publish-for-npm": "^1.0.7",
     "puppeteer": "^19.5.2"
   },
   "license": "MIT"
