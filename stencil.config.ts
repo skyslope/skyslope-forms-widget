@@ -27,6 +27,9 @@ export const config: Config = {
     appEnv,
     ...environment[appEnv]
   },
+  extras: {
+    enableImportInjection: true // support for vite
+  },
   outputTargets: [
     {
       type: 'dist',
