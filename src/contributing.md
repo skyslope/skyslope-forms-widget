@@ -13,15 +13,10 @@ There are a couple gotchas when working with web components, especially when it 
 5. Run `npm run lint:fix` to run the linter and fix any issues
 6. Run `npm run build:integ`, `npm run build:staging`, or `npm run build:prod` to build the project for the different environments
 
-### Dual hosting on GitHub / BitBucket
-
-This project is hosted on both GitHub (public) and Bitbucket (internal only).
-If you are a SkySlope engineer you will be able to update both. You'll just need to add both the GitHub and the Bitbucket repos as remote / upstream origins.
-
 ### Releasing
 
 If you are a SkySlope engineer, you'll be able to access our release pipeline in CF.
-To release a new version, just bump the version in `package.json` and push to `main`.  The pipeline will take care of the rest. 
+To release a new version, just bump the version in `package.json` and create a pull request to `main`.  The pipeline will take care of the rest. 
 
 ### Modifying netlify demo site
 
