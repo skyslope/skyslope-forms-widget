@@ -23,16 +23,24 @@ yarn add @skyslope/forms-widget
 In your index.js (or a similar entry file), import or require the @skyslope/forms-widget package and initialize the widget:
 ```javascript
 // ES6 import
-import '@skyslope/forms-widget';
+import { defineCustomElements } from '@skyslope/forms-widget/loader/';
 
 // CommonJS require
-require('@skyslope/forms-widget');
+const { defineCustomElements } = require('@skyslope/forms-widget/loader/')
+
+// Define all custom elements on the custom elements registry
+defineCustomElements();
 
 // Initialize the widget
 const init = () => window.skyslope.widget.initialize({
   idp: 'myIDP' // the idp for SSO, if using
 })
 window.skyslope?.widget ? init() : window.skyslope = { onLoad: () => init() };
+```
+
+Web components from the @skyslope/forms-widget package can now be used in your application. For example:
+```html
+<ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
 ```
 
 ### Installation with CDN
@@ -54,7 +62,12 @@ Then, in your app or in your index.html, add the following script:
 </script>
 ```
 
-### Version-based implementation with CDN
+Web components from the @skyslope/forms-widget package can now be used in your application. For example:
+```html
+<ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
+```
+
+#### Implementing a specific version of the widget via CDN
 If you would like to use a specific version of the widget, you can specify the version in the script tag. For example:
 ```javascript
 <script type="module" src="https://cdn.skyslope.com/skyslope-forms-widget/{version-from-package.json}/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script>  
@@ -72,7 +85,7 @@ If you are not using SSO, you can initialize the widget without an IDP:
 
 ## Usage with Modal
 
-The modal is configurable through the openModal function. For example:
+A pre-made modal is available for use with the widget. To open the modal, call the openModal function:
 ```javascript
 window.skyslope.widget.openModal();
 ``` 
@@ -100,23 +113,23 @@ window.skyslope.widget.openModal({
 ## Custom Usage with Inline Container
 If you do not want to open a modal in your app and would instead like to customize the placement of the widget, follow the instructions below:
 
-To use the inline component instead of the openModal() function, you will need to add the following ss-container-inline web component to your HTML:
-```html
-<ss-container-inline style="height: 1000px; /*... add any other styling here*/"/>
-```
-
-Add the `openInline: true` option to the initialize() function, as shown below:
+First, add the `openInline: true` option to the initialize() function, as shown below:
 
 ```javascript
 const init = () => window.skyslope.widget.initialize({
-  idp: 'myIdp', // the idp for SSO
   openInline: true
 })
 ```
+This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
 
-This will display the Skyslope Forms widget within your application, without opening a modal.
+Next, you will need to add the following ss-container-inline web component to your HTML or JSX:
+```html
+<ss-container-inline style="height: 1000px; /*... add any other styling here*/"/>
+```
+  
+The widget will be rendered inside the ss-container-inline web component. The ss-container-inline web component can be styled as desired.
 
-Additionally, all navigation and refresh functions work as expected.
+To interact programmatically with the ss-container-inline component, see [API for custom implementations](#api-for-custom-implementations).
 
 ## Pre-made buttons
 There are four pre-made button web components that you can use to interact with the Skyslope Forms widget:  
@@ -160,12 +173,13 @@ Then, in your HTML, you can use the ss-button-create-listing component with the 
 This will render a blue button with white text and rounded corners, with the custom styles applied. When the button is hovered over, it will turn dark blue.
 
 ## API for custom implementations 
+<a id="api-for-custom-implementations"></a>
 The SkySlope Forms Widget provides the following API on the `window.skyslope.widget` object.  
 All of these functions are used internally by the web-components and are exposed for use in custom implementations.
 
 - `openModal`: opens a modal with SkySlope Forms loaded inside an iframe. This injects a modal [web component](https://developer.mozilla.org/en-US/docs/Web/Web_Components) into the body of the page.
 - `closeModal`: closes the modal.
-- `reload`: reloads the iframe.
+- `reload`: reloads the widgets internal iframe.
 - `navigateTo(path: string)`: navigates to a different path within the Forms app.
 - `navigateToCreateTransaction`: navigates to the Create Transaction page.
 - `navigateToCreateListing`: navigates to the Create Listing page.

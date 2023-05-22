@@ -5,7 +5,7 @@ import {SkyslopePaths} from "./components/ss-container-inline/types";
 
 export class SkySlopeWidget {
   private _path: string;
-  private _idp: string;
+  private _idp: string | null;
   private _openInline: boolean;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
@@ -14,9 +14,9 @@ export class SkySlopeWidget {
     this._path = '';
   }
 
-  initialize = ({idp, openInline}: SkyslopeConfig) => {
-    this._idp = idp;
-    this._openInline = openInline;
+  initialize = ({idp, openInline}: SkyslopeConfig = {idp: null, openInline: false}) => {
+    this._idp = idp ?? null;
+    this._openInline = openInline ?? false;
   };
 
   openModal = ({

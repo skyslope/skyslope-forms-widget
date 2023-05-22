@@ -34,7 +34,7 @@ export interface ModalProps {
 }
 
 export interface SkyslopeConfig {
-  idp: string;
+  idp?: string | null;
   openInline?: boolean;
 }
 
@@ -44,18 +44,6 @@ declare global {
       widget?: SkySlopeWidget;
       onLoad?: () => void
     }
-    // skyslopeOnLoad: () => void;
-    // skyslope: {
-    //   initialize: (config: SkyslopeConfig) => void;
-    //   openModal: (modalProps?: ModalProps) => void;
-    //   closeModal: () => void;
-    //   reload: () => void;
-    //   navigateTo: (path: string) => void;
-    //   navigateToCreateListing: () => void;
-    //   navigateToCreateTransaction: () => void;
-    //   navigateToBrowseLibraries: () => void;
-    //   navigateToViewAllFiles: () => void;
-    // };
   }
 }
 
