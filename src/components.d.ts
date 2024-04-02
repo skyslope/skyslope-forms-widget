@@ -12,6 +12,9 @@ export namespace Components {
     interface SsButtonCreateListing {
         "unstyled": boolean;
     }
+    interface SsButtonStartBuyerAgreement {
+        "unstyled": boolean;
+    }
     interface SsButtonViewAllFiles {
         "unstyled": boolean;
     }
@@ -78,6 +81,12 @@ declare global {
         prototype: HTMLSsButtonCreateListingElement;
         new (): HTMLSsButtonCreateListingElement;
     };
+    interface HTMLSsButtonStartBuyerAgreementElement extends Components.SsButtonStartBuyerAgreement, HTMLStencilElement {
+    }
+    var HTMLSsButtonStartBuyerAgreementElement: {
+        prototype: HTMLSsButtonStartBuyerAgreementElement;
+        new (): HTMLSsButtonStartBuyerAgreementElement;
+    };
     interface HTMLSsButtonViewAllFilesElement extends Components.SsButtonViewAllFiles, HTMLStencilElement {
     }
     var HTMLSsButtonViewAllFilesElement: {
@@ -117,6 +126,7 @@ declare global {
     interface HTMLElementTagNameMap {
         "ss-button-browse-libraries": HTMLSsButtonBrowseLibrariesElement;
         "ss-button-create-listing": HTMLSsButtonCreateListingElement;
+        "ss-button-start-buyer-agreement": HTMLSsButtonStartBuyerAgreementElement;
         "ss-button-view-all-files": HTMLSsButtonViewAllFilesElement;
         "ss-button-write-offer": HTMLSsButtonWriteOfferElement;
         "ss-contained-widget": HTMLSsContainedWidgetElement;
@@ -130,6 +140,9 @@ declare namespace LocalJSX {
         "unstyled"?: boolean;
     }
     interface SsButtonCreateListing {
+        "unstyled"?: boolean;
+    }
+    interface SsButtonStartBuyerAgreement {
         "unstyled"?: boolean;
     }
     interface SsButtonViewAllFiles {
@@ -191,6 +204,7 @@ declare namespace LocalJSX {
     interface IntrinsicElements {
         "ss-button-browse-libraries": SsButtonBrowseLibraries;
         "ss-button-create-listing": SsButtonCreateListing;
+        "ss-button-start-buyer-agreement": SsButtonStartBuyerAgreement;
         "ss-button-view-all-files": SsButtonViewAllFiles;
         "ss-button-write-offer": SsButtonWriteOffer;
         "ss-contained-widget": SsContainedWidget;
@@ -205,6 +219,7 @@ declare module "@stencil/core" {
         interface IntrinsicElements {
             "ss-button-browse-libraries": LocalJSX.SsButtonBrowseLibraries & JSXBase.HTMLAttributes<HTMLSsButtonBrowseLibrariesElement>;
             "ss-button-create-listing": LocalJSX.SsButtonCreateListing & JSXBase.HTMLAttributes<HTMLSsButtonCreateListingElement>;
+            "ss-button-start-buyer-agreement": LocalJSX.SsButtonStartBuyerAgreement & JSXBase.HTMLAttributes<HTMLSsButtonStartBuyerAgreementElement>;
             "ss-button-view-all-files": LocalJSX.SsButtonViewAllFiles & JSXBase.HTMLAttributes<HTMLSsButtonViewAllFilesElement>;
             "ss-button-write-offer": LocalJSX.SsButtonWriteOffer & JSXBase.HTMLAttributes<HTMLSsButtonWriteOfferElement>;
             "ss-contained-widget": LocalJSX.SsContainedWidget & JSXBase.HTMLAttributes<HTMLSsContainedWidgetElement>;

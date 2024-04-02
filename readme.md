@@ -139,6 +139,7 @@ By using these pre-made buttons, you can easily integrate Skyslope Forms functio
 
 - `<ss-button-create-listing>`: Opens the "Create Listing" page when clicked.
 - `<ss-button-write-offer>`: Opens the "Create Transaction" page when clicked.
+- `<ss-button-start-buyer-agreement>`: Starts a Buyer Agreement.
 - `<ss-button-browse-libraries>`: Opens the "Browse Libraries" page when clicked.
 - `<ss-button-view-all-files>`: Opens the "View All Files" page when clicked.
 
@@ -146,9 +147,12 @@ To use these buttons, you can add them anywhere in your HTML like so:
 ```javascript
 <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
 <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
+<ss-button-start-buyer-agreement id="create-buyer-agreement">Buyer Agreement</ss-button-start-buyer-agreement>
 <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
 <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
 ```
+
+<a id="links"></a>
 
 ### Unstyled Prop
 The unstyled prop is an optional prop that can be passed to the button web components. When this prop is set to true, the button will be rendered without any default styles applied. This allows developers to fully customize the appearance of the button using their own CSS styles.
@@ -185,6 +189,7 @@ All of these functions are used internally by the web-components and are exposed
 - `navigateTo(path: string)`: navigates to a different path within the Forms app.
 - `navigateToCreateTransaction`: navigates to the Create Transaction page.
 - `navigateToCreateListing`: navigates to the Create Listing page.
+- `navigateToStartBuyerAgreement`: navigates to start buyer agreement page.
 - `navigateToBrowseLibraries`: navigates to the Browse Libraries page.
 - `navigateToViewAllFiles`: navigates to the View All Files page.
 
