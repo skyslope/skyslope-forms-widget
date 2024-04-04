@@ -63,6 +63,7 @@ export class SkySlopeWidget {
   navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
   navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
+  navigateToStartBuyerAgreement = () => this.navigateTo(SkyslopePaths.QuickCreateBuyerAgreement);
   navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
 
   registerReload = (reloadCallback: () => void) => {

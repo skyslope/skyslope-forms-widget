@@ -102,6 +102,7 @@ export class SsContainedWidget {
           <h2 class="ss-container-text">The fastest way to put deals together</h2>
           <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
           <ss-button-write-offer id="write-offer-btn">Write an Offer</ss-button-write-offer>
+          <ss-button-start-buyer-agreement id="start-buyer-agreemnt-btn">Buyer Agreement</ss-button-start-buyer-agreement>
           <ss-button-browse-libraries id="browse-libraries-btn">Browse Libraries</ss-button-browse-libraries>
           <ss-button-view-all-files id="view-all-files-btn">View All Files</ss-button-view-all-files>
         </div>

@@ -20,5 +20,4 @@ To release a new version, just bump the version in `package.json` and create a p
 
 ### Modifying netlify demo site
 
-The netlify site is a static site that is built from the `www` folder. It is purposefully on a separate domain as `skyslope.com` to prove cross domain framing works.  The site is hosted on netlify and is automatically built and deployed when changes are pushed to the `main` branch.
-The build configuration is located in `netlify.toml` and can be modified as needed to change the deployed environment or build process.
+See https://bitbucket.org/skyslope/skyslope-widget-demo/
