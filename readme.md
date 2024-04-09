@@ -154,11 +154,12 @@ To interact programmatically with the ss-container-inline component, see [API fo
 
 ## Pre-made buttons
 
-There are four pre-made button web components that you can use to interact with the Skyslope Forms widget:
+There are pre-made button web components that you can use to interact with the Skyslope Forms widget:
 
 ```javascript
 <ss-button-create-listing>
 <ss-button-write-offer>
+<ss-button-start-buyer-agreement>
 <ss-button-browse-libraries>
 <ss-button-view-all-files>
 ```
