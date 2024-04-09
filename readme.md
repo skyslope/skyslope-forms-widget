@@ -194,6 +194,7 @@ To use these buttons, you can add them anywhere in your HTML like so:
             <div class="cards">
                 <ss-button-create-listing>Write a Listing</ss-button-create-listing>
                 <ss-button-write-offer>Write an Offer</ss-button-write-offer>
+                <ss-button-start-buyer-agreement>Buyer Agreement</ss-button-start-buyer-agreement>
                 <ss-button-browse-libraries>Browse Libraries</ss-button-browse-libraries>
                 <ss-button-view-all-files>View All Files</ss-button-view-all-files>
             </div>
