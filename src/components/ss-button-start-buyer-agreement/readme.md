@@ -21,8 +21,8 @@
 ### Graph
 ```mermaid
 graph TD;
-  ss-contained-widget --> ss-button-browse-libraries
-  style ss-button-browse-libraries fill:#f9f,stroke:#333,stroke-width:4px
+  ss-contained-widget --> ss-button-start-buyer-agreement
+  style ss-button-start-buyer-agreement fill:#f9f,stroke:#333,stroke-width:4px
 ```
 
 ----------------------------------------------
