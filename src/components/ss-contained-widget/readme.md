@@ -11,6 +11,7 @@
 
 - [ss-button-create-listing](../ss-button-create-listing)
 - [ss-button-write-offer](../ss-button-write-offer)
+- [ss-button-start-buyer-agreement](../ss-button-start-buyer-agreement)
 - [ss-button-browse-libraries](../ss-button-browse-libraries)
 - [ss-button-view-all-files](../ss-button-view-all-files)
 
@@ -19,6 +20,7 @@
 graph TD;
   ss-contained-widget --> ss-button-create-listing
   ss-contained-widget --> ss-button-write-offer
+  ss-contained-widget --> ss-button-start-buyer-agreement
   ss-contained-widget --> ss-button-browse-libraries
   ss-contained-widget --> ss-button-view-all-files
   style ss-contained-widget fill:#f9f,stroke:#333,stroke-width:4px
