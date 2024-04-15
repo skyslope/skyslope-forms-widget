@@ -8,8 +8,8 @@ export enum AppEnvironment {
 
 export const environment: Record<AppEnvironment, { formsUrl: string }> = {
   [AppEnvironment.DEVELOPMENT]: {
-    formsUrl: `https://94c7-66-60-164-10.ngrok-free.app/`,
-    // formsUrl: `http://localhost:3001/`,
+    // formsUrl: `https://94c7-66-60-164-10.ngrok-free.app/`,
+    formsUrl: `http://localhost:3001/`,
     // formsUrl: `https://integ-forms.skyslope.com/`,
   },
   [AppEnvironment.INTEG]: {
