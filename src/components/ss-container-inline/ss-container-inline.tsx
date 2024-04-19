@@ -9,9 +9,24 @@ import reinitializeGlobalScript from '../../globalScript';
 export class SsContainerInline {
   @Element() el: HTMLSsContainerInlineElement;
 
+  private addUrlParams(url: string, params: Record<string, string> | string | URLSearchParams): string {
+    const urlObj = new URL(url);
+    const urlParams = new URLSearchParams(params);
+    urlParams.forEach((value, key) => urlObj.searchParams.set(key, value));
+    return urlObj.toString();
+  }
+
   private getUrl() {
-    const idpQuerystring = `${(window.skyslope.widget.idp == null ? '' : `${window.skyslope.widget.path.includes('?') ? `&` : `?`}idp=${window.skyslope.widget.idp}`)}`;
-    return `${Env.formsUrl}${window.skyslope.widget.path}${idpQuerystring}`;
+    let params = {
+      widgetTrack: JSON.stringify({
+        widgetOrigin: window.location.origin,
+        widgetSourceEvent: 'click',
+        widgetSourceUrl: window.skyslope.widget.path,
+      }),
+    };
+    if (window.skyslope.widget.idp != null) params['idp'] = window.skyslope.widget.idp;
+
+    return `${this.addUrlParams(`${Env.formsUrl}${window.skyslope.widget.path}`, params)}`;
   }
 
   private iframe = () => (this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement);
@@ -25,8 +40,8 @@ export class SsContainerInline {
   };
 
   connectedCallback() {
-    window.skyslope.widget.registerReload(this.reloadIframe)
-    window.skyslope.widget.registerNavigateTo(this.navigateTo)
+    window.skyslope.widget.registerReload(this.reloadIframe);
+    window.skyslope.widget.registerNavigateTo(this.navigateTo);
   }
 
   disconnectedCallback() {
@@ -37,7 +52,8 @@ export class SsContainerInline {
   render() {
     return (
       <Host>
-        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={this.getUrl()} style={{backgroundColor: '#f4f8fc'}}/>
+        <iframe id='ss-container-iframe' frameborder='0' allowfullScreen title='SkySlope Forms' src={this.getUrl()}
+                style={{ backgroundColor: '#f4f8fc' }} />
       </Host>
     );
   }
