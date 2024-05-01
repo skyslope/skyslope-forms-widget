@@ -1,8 +1,8 @@
 # SkySlope Forms Widget
 
 
-The Skyslope Forms Widget is a tool that lets users embed Skyslope forms into their own web applications, providing easy access to SkySlope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.  
-Internally, the widget is built using [StencilJS](https://stenciljs.com/), a web component compiler. The widget injects an iframe into the DOM of the host application, which loads the Skyslope Forms application. The widget then communicates with the iframe to provide a seamless user experience.
+The SkySlope Forms Widget is a tool that lets users embed SkySlope forms into their own web applications, providing easy access to SkySlope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.  
+Internally, the widget is built using [StencilJS](https://stenciljs.com/), a web component compiler. The widget injects an iframe into the DOM of the host application, which loads the SkySlope Forms application. The widget then communicates with the iframe to provide a seamless user experience.
 
 Demo Site: <https://skyslope-widget-demo.netlify.app/>
 <br/>
@@ -154,7 +154,7 @@ To interact programmatically with the ss-container-inline component, see [API fo
 
 ## Pre-made buttons
 
-There are pre-made button web components that you can use to interact with the Skyslope Forms widget:
+There are pre-made button web components that you can use to interact with the  Forms widget:
 
 ```javascript
 <ss-button-create-listing>
@@ -165,7 +165,7 @@ There are pre-made button web components that you can use to interact with the S
 ```
 
 </br>
-By using these pre-made buttons, you can easily integrate Skyslope Forms functionality into your application without having to build your own UI components.
+By using these pre-made buttons, you can easily integrate SkySlope Forms functionality into your application without having to build your own UI components.
 </br>
 </br>
 
