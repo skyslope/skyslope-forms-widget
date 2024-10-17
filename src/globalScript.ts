@@ -65,6 +65,7 @@ export class SkySlopeWidget {
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
   navigateToStartBuyerAgreement = () => this.navigateTo(SkyslopePaths.QuickCreateBuyerAgreement);
   navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
+  navigateToEnvelope = (envelopeId) => this.navigateTo(`envelopes/${envelopeId}/fill`);
 
   registerReload = (reloadCallback: () => void) => {
     if(this._reloadCallback) {

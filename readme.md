@@ -341,3 +341,4 @@ All of these functions are used internally by the web-components and are exposed
 - `navigateToStartBuyerAgreement`: navigates to start buyer agreement page.
 - `navigateToBrowseLibraries` navigates to the Browse Libraries page.
 - `navigateToViewAllFiles` navigates to the View All Files page.
+- `navigateToEnvelope(envelopeId: integer)` navigates to the Envelope Bulk Fill page.
