@@ -81,6 +81,13 @@
         };
         window.document.body.appendChild(closeBtn);
       }
+
+      function openEnvelope() {
+        let envelopeId = document.getElementById('goto-envelope-id').value.toString();
+
+        window.skyslope.widget.navigateToEnvelope(envelopeId);
+        window.skyslope.widget.openModal();
+      }
     </script>
     <style>
       :root {
@@ -259,12 +266,26 @@
         box-shadow: 0px 12px 17px 2px rgba(0, 89, 218, 0.04), 0px 5px 22px 4px rgba(0, 89, 218, 0.03);
         border-radius: 12px;
       }
+
+      .envelope-id-input {
+        color: #5e5e5e;
+        font-size: 14px;
+        box-shadow: none;
+        padding: 6px 8px;
+        line-height: 16px;
+        border: 1px solid darkblue;
+        border-radius: 3px;
+        background: transparent;
+        box-sizing: border-box;
+        height: 30px;
+        width: 120px;
+      }
     </style>
   </head>
   <body>
     <main>
       <header>
-        <h2>Sample<b>CRM</b></h2>
+        <img src="https://skyslope.com/wp-content/uploads/2021/03/logo-skyslope-2x.svg" height="31" alt="SkySlope - Real Estate Transaction Management" class="header-logo">
         <p>User</p>
       </header>
       <nav>
@@ -309,6 +330,14 @@
           <div class="card">
             <p>We also have single widget that can easily be dropped anywhere</p>
             <ss-contained-widget class="contained-widget"></ss-contained-widget>
+          </div>
+          <div class="card">
+            <p>Enter a valid envelope id to open the widget in the form filling experience.<br>
+              <i>Note: Envelope must be in draft status (not sent, completed or canceled).</i></p>
+            <div>
+              <button onclick="openEnvelope()">Go to Envelope</button>
+              <input id="goto-envelope-id" class="envelope-id-input" inputmode="numeric" oninput="this.value = this.value.replace(/\D+/g, '')" maxlength="12" />
+            </div>
           </div>
         </div>
       </section>
