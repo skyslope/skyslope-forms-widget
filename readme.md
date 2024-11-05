@@ -1,6 +1,5 @@
 # SkySlope Forms Widget
 
-
 The SkySlope Forms Widget is a tool that lets users embed SkySlope forms into their own web applications, providing easy access to SkySlope's real estate transaction management features. It is available as a JavaScript library and can be integrated into a variety of web applications.  
 Internally, the widget is built using [StencilJS](https://stenciljs.com/), a web component compiler. The widget injects an iframe into the DOM of the host application, which loads the SkySlope Forms application. The widget then communicates with the iframe to provide a seamless user experience.
 
@@ -75,11 +74,13 @@ Then, in your app or in your index.html, add the following script:
 ```
 
 Web components from the @skyslope/forms-widget package can now be used in your application. For example:
+
 ```html
 <ss-button-create-listing id="create-listing-btn">Write a Listing</ss-button-create-listing>
 ```
 
 #### Implementing a specific version of the widget via CDN
+
 If you would like to use a specific version of the widget, you can specify the version in the script tag. For example:
 
 ```javascript
@@ -88,6 +89,7 @@ If you would like to use a specific version of the widget, you can specify the v
 ```
 
 ### Non SSO Implementation
+
 If you are not using SSO, you can initialize the widget without an IDP:
 
 ```javascript
@@ -128,6 +130,7 @@ window.skyslope.widget.openModal({
 ```
 
 ## Custom Usage with Inline Container
+
 If you do not want to open a modal in your app and would instead like to customize the placement of the widget, follow the instructions below:
 
 First, add the `openInline: true` option to the initialize() function, as shown below:
@@ -138,6 +141,7 @@ const init = () =>
     openInline: true,
   });
 ```
+
 This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
 
 This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
@@ -154,7 +158,7 @@ To interact programmatically with the ss-container-inline component, see [API fo
 
 ## Pre-made buttons
 
-There are pre-made button web components that you can use to interact with the  Forms widget:
+There are pre-made button web components that you can use to interact with the Forms widget:
 
 ```javascript
 <ss-button-create-listing>
@@ -336,9 +340,44 @@ All of these functions are used internally by the web-components and are exposed
 - `closeModal` closes the modal.
 - `reload` reloads the widgets internal iframe.
 - `navigateTo(path: string)` navigates to a different path within the Forms app.
-- `navigateToCreateTransaction` navigates to the Create Transaction page.
-- `navigateToCreateListing` navigates to the Create Listing page.
+- `navigateToCreateTransaction` navigates to the Create Transaction page. Returns newly created ID for data fetching. See section on [Listening for Events](#listening-for-events).
+- `navigateToCreateListing` navigates to the Create Listing page. Returns newly created ID for data fetching. See section on [Listening for Events](#listening-for-events).
 - `navigateToStartBuyerAgreement`: navigates to start buyer agreement page.
 - `navigateToBrowseLibraries` navigates to the Browse Libraries page.
 - `navigateToViewAllFiles` navigates to the View All Files page.
 - `navigateToEnvelope(envelopeId: integer)` navigates to the Envelope Bulk Fill page.
+
+## Listening for Events
+
+Depending on the function selected, the SkySlope Forms Widget can post a message containing information relevant to further data querying. For example, after calling `navigateToCreateTransaction`:
+
+```javascript
+interface SkySlopeMessage {
+  status?:
+    | 'forms-onboarding-complete'
+    | 'forms-edit-contacts'
+    | 'forms-download-document'
+    | 'forms-create-file'
+    | 'forms-bulk-fill'
+    | 'forms-buyer-agreement-rename'
+    | 'forms-prepare-signature'
+    | 'digisign-prepare-for-signature';
+    | 'digisign-ready-to-send',
+  metadata?: {
+    fileId?: number,
+    formsEnvelopeId?: number,
+    formsDocumentIds?: number[],
+    digisignEnvelopeId?: string,
+  };
+}
+window.addEventListener('message', event => {
+  // Check if the origin of the message is from SkySlope Forms
+  if (event.origin == 'forms.skyslope.com') {
+    const data = JSON.parse(event.data);
+    const { metadata, status } = data;
+    console.log(metadata.fileId); // Returns ID of newly created transaction or listing, eg. 123
+
+    console.log(status); // 'forms-*'
+  }
+});
+```
