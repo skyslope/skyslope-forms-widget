@@ -15,8 +15,36 @@ There are a couple gotchas when working with web components, especially when it 
 
 ### Releasing
 
-If you are a SkySlope engineer, you'll be able to access our release pipeline in CF.
-To release a new version, just bump the version in `package.json` and create a pull request to `main`.  The pipeline will take care of the rest. 
+We use semantic-release to automate version management and package publishing. The release process is triggered automatically when commits are pushed to the `main` branch.
+
+#### How it works
+
+1. Every commit to `main` triggers our release workflow
+2. The process analyzes commit messages following the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+   - `feat:` triggers a MINOR version bump (e.g., 1.1.0 → 1.2.0)
+   - `fix:` triggers a PATCH version bump (e.g., 1.1.1 → 1.1.2)
+   - `BREAKING CHANGE:` in the commit body triggers a MAJOR version bump (e.g., 1.1.1 → 2.0.0)
+3. After a successful release, a CI workflow automatically:
+   - Builds the package
+   - Publishes it to our CDN via Argo
+   - Makes the new version available at `cdn.skyslope.com/widget/v{version}`
+
+#### Commit Message Format
+
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+To release a new version, just create a pull request to `main` with properly formatted commit messages. The pipeline will automatically:
+1. Lint your commit messages
+2. Determine the next version number
+3. Create a new release
+4. Publish the package
 
 ### Modifying netlify demo site
 
