@@ -24,15 +24,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Debug SHAs
+      - name: Debug SHAs and Git Info
         run: |
           echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
           echo "Head SHA: ${{ github.sha }}"
+          echo "Git Status:"
+          git status
+          echo "Available Branches:"
+          git branch -a
+          echo "Recent Commits:"
+          git log --oneline -n 5
 
       - name: Run commitlint
         run: |
-          if git rev-list ${{ github.event.pull_request.base.sha }}..${{ github.sha }} | grep .; then
-            npx commitlint --from=${{ github.event.pull_request.base.sha }} --to=${{ github.sha }}
+          if git merge-base --is-ancestor ${{ github.event.pull_request.base.sha }} ${{ github.sha }}; then
+            if git rev-list ${{ github.event.pull_request.base.sha }}..${{ github.sha }} | grep .; then
+              npx commitlint --from=${{ github.event.pull_request.base.sha }} --to=${{ github.sha }}
+            else
+              echo "No new commits to lint"
+            fi
           else
-            echo "No new commits to lint"
+            echo "Invalid commit range. Base commit is not an ancestor of head commit."
+            echo "Falling back to linting the last commit..."
+            npx commitlint --from HEAD~1 --to HEAD
           fi
