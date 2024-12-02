@@ -347,6 +347,32 @@ All of these functions are used internally by the web-components and are exposed
 - `navigateToViewAllFiles` navigates to the View All Files page.
 - `navigateToEnvelope(envelopeId: integer)` navigates to the Envelope Bulk Fill page.
 
+## Query Parameters
+
+The SkySlope Forms Widget allows you to customize its behavior by appending the following query parameters to its URL:
+
+| **Parameter**   | **Type** | **Description**                                                                                                               | **Default** | **Example**              |
+| --------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------ |
+| `headerVariant` | `string` | Controls hiding navigation & settings elements in the header of any `file-details` page in Forms and the Build UI in DigiSign | `default`   | `?headerVariant=focused` |
+
+---
+
+### Example Usage
+
+This query parameter can be applied to the following routes in each respective application:
+
+#### Forms
+
+```html
+https://forms.skyslope.com/file-details/{fileId}/{route}?headerVariant=focused
+```
+
+#### DigiSign
+
+```html
+https://send.skyslope.com/envelopes/{envelopeId}?headerVariant=focused
+```
+
 ## Listening for Events
 
 Depending on the function selected, the SkySlope Forms Widget can post a message containing information relevant to further data querying. For example, after calling `navigateToCreateTransaction`:
