@@ -144,8 +144,6 @@ const init = () =>
 
 This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
 
-This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
-
 Next, you will need to add the following ss-container-inline web component to your HTML or JSX:
 
 ```html
