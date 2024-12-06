@@ -1,12 +1,13 @@
 /* eslint-disable @stencil-community/strict-boolean-conditions */
 
-import {ModalProps, SkyslopeConfig} from "./window";
-import {SkyslopePaths} from "./components/ss-container-inline/types";
+import { ModalProps, SkyslopeConfig } from './window';
+import { SkyslopePaths } from './components/ss-container-inline/types';
 
 export class SkySlopeWidget {
   private _path: string;
   private _idp: string | null;
   private _openInline: boolean;
+  private _headerVariant: string | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
 
@@ -14,26 +15,22 @@ export class SkySlopeWidget {
     this._path = '';
   }
 
-  initialize = ({idp, openInline}: SkyslopeConfig = {idp: null, openInline: false}) => {
+  initialize = ({ idp, openInline, headerVariant }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null }) => {
     this._idp = idp ?? null;
     this._openInline = openInline ?? false;
+    this._headerVariant = headerVariant ?? null;
   };
 
-  openModal = ({
-                 open,
-                 shouldConstrainMaxWidth,
-                 showHeaderButtons,
-                 showOverlay,
-                 styleOverrides,
-                 roundedEdges
-               }: ModalProps = {
-    open: true,
-    shouldConstrainMaxWidth: true,
-    roundedEdges: true,
-    styleOverrides: {},
-    showOverlay: true,
-    showHeaderButtons: true
-  }) => {
+  openModal = (
+    { open, shouldConstrainMaxWidth, showHeaderButtons, showOverlay, styleOverrides, roundedEdges }: ModalProps = {
+      open: true,
+      shouldConstrainMaxWidth: true,
+      roundedEdges: true,
+      styleOverrides: {},
+      showOverlay: true,
+      showHeaderButtons: true,
+    },
+  ) => {
     const skyslopeForms = document.createElement('ss-container-modal');
     skyslopeForms.open = open;
     skyslopeForms.shouldConstrainMaxWidth = shouldConstrainMaxWidth;
@@ -53,10 +50,10 @@ export class SkySlopeWidget {
     }
   };
 
-  navigateTo = (path) => {
+  navigateTo = path => {
     this._path = path;
-    this._navigateCallback?.(path)
-  }
+    this._navigateCallback?.(path);
+  };
   reload = () => {
     this._reloadCallback?.();
   };
@@ -65,21 +62,21 @@ export class SkySlopeWidget {
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
   navigateToStartBuyerAgreement = () => this.navigateTo(SkyslopePaths.QuickCreateBuyerAgreement);
   navigateToViewAllFiles = () => this.navigateTo(SkyslopePaths.ViewFiles);
-  navigateToEnvelope = (envelopeId) => this.navigateTo(`envelopes/${envelopeId}/fill`);
+  navigateToEnvelope = envelopeId => this.navigateTo(`envelopes/${envelopeId}/fill`);
 
   registerReload = (reloadCallback: () => void) => {
-    if(this._reloadCallback) {
-      throw new Error('Reload Callback is already defined. Is more than one inline container running?')
+    if (this._reloadCallback) {
+      throw new Error('Reload Callback is already defined. Is more than one inline container running?');
     }
     this._reloadCallback = reloadCallback;
-  }
+  };
 
   registerNavigateTo = (navigateCallback: (path: string) => void) => {
-    if(this._navigateCallback) {
-      throw new Error('Navigate Callback is already defined. Is more than one inline container running?')
+    if (this._navigateCallback) {
+      throw new Error('Navigate Callback is already defined. Is more than one inline container running?');
     }
     this._navigateCallback = navigateCallback;
-  }
+  };
 
   get openInline(): boolean {
     return this._openInline;
@@ -92,8 +89,11 @@ export class SkySlopeWidget {
   get path(): string {
     return this._path;
   }
-}
 
+  get headerVariant(): string {
+    return this._headerVariant;
+  }
+}
 
 export default function () {
   if (!window.skyslope) window.skyslope = {};

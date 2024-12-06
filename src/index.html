@@ -10,11 +10,9 @@
     <!-- <script type="module" src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/skyslope-forms-widget/skyslope-forms-widget.esm.js"></script> -->
     <!-- <script nomodule src="https://integ-cdn.skyslope.com/skyslope-forms-widget/latest/esm/skyslope-forms-widgetcomponents.js"></script> -->
     <script type="text/javascript" language="javascript">
-      const init = () =>
-        window.skyslope.widget.initialize({
-          // idp: 'ure', // the idp for SSO
-          // openInline: true
-        });
+      const init = (options = {}) => {
+        return window.skyslope.widget.initialize({ ...options });
+      };
       window.skyslope?.widget ? init() : (window.skyslope = { onLoad: () => init() });
 
       function openSquare() {
@@ -80,6 +78,24 @@
           this.remove();
         };
         window.document.body.appendChild(closeBtn);
+      }
+
+      function openInline() {
+        if (!document.querySelector('.inline-card')) {
+          const newCard = document.createElement('div');
+          newCard.className = 'inline-card';
+          newCard.style.gridColumn = 'span 2';
+
+          const container = document.createElement('ss-container-inline');
+          container.style.height = '800px';
+
+          newCard.appendChild(container);
+
+          const cardsContainer = document.querySelector('.cards');
+          const fourthCard = cardsContainer.children[3];
+          fourthCard.insertAdjacentElement('afterend', newCard);
+          init({ openInline: true, headerVariant: 'focused' });
+        }
       }
 
       function openEnvelope() {
@@ -285,7 +301,7 @@
   <body>
     <main>
       <header>
-        <img src="https://skyslope.com/wp-content/uploads/2021/03/logo-skyslope-2x.svg" height="31" alt="SkySlope - Real Estate Transaction Management" class="header-logo">
+        <img src="https://skyslope.com/wp-content/uploads/2021/03/logo-skyslope-2x.svg" height="31" alt="SkySlope - Real Estate Transaction Management" class="header-logo" />
         <p>User</p>
       </header>
       <nav>
@@ -300,7 +316,7 @@
         </ul>
       </nav>
 
-      <section style='z-index: 10'>
+      <section style="z-index: 10">
         <h1>Welcome to the SkySlope Forms Widget Demo!</h1>
         <h3>This html is duplicated in <a>https://bitbucket.org/skyslope/skyslope-widget-demo/</a></h3>
         <div class="cards">
@@ -326,14 +342,17 @@
             <button onclick="openNoBD()">No Backdrop</button>
             <button onclick="openCustomClose()">Custom Close button</button>
             <button onclick="openPositioned()">Positioned Manually</button>
+            <button onclick="openInline()">Inline</button>
           </div>
           <div class="card">
             <p>We also have single widget that can easily be dropped anywhere</p>
             <ss-contained-widget class="contained-widget"></ss-contained-widget>
           </div>
           <div class="card">
-            <p>Enter a valid envelope id to open the widget in the form filling experience.<br>
-              <i>Note: Envelope must be in draft status (not sent, completed or canceled).</i></p>
+            <p>
+              Enter a valid envelope id to open the widget in the form filling experience.<br />
+              <i>Note: Envelope must be in draft status (not sent, completed or canceled).</i>
+            </p>
             <div>
               <button onclick="openEnvelope()">Go to Envelope</button>
               <input id="goto-envelope-id" class="envelope-id-input" inputmode="numeric" oninput="this.value = this.value.replace(/\D+/g, '')" maxlength="12" />

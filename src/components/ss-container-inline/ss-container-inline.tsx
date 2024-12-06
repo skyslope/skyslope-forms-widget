@@ -16,20 +16,25 @@ export class SsContainerInline {
     return urlObj.toString();
   }
 
-  private getUrl() {
-    let params = {
+  private getUrl(): string {
+    const { widget } = window.skyslope;
+
+    const params: Record<string, string> = {
       widgetTrack: JSON.stringify({
         widgetOrigin: window.location.origin,
         widgetSourceEvent: 'click',
-        widgetSourceUrl: window.skyslope.widget.path,
+        widgetSourceUrl: widget.path,
       }),
     };
-    if (window.skyslope.widget.idp != null) params['idp'] = window.skyslope.widget.idp;
 
-    return `${this.addUrlParams(`${Env.formsUrl}${window.skyslope.widget.path}`, params)}`;
+    if (widget.idp) params.idp = widget.idp;
+    if (widget.headerVariant) params.headerVariant = widget.headerVariant;
+
+    const baseUrl = `${Env.formsUrl}${widget.path}`;
+    return this.addUrlParams(baseUrl, params);
   }
 
-  private iframe = () => (this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement);
+  private iframe = () => this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement;
 
   private reloadIframe = () => {
     this.iframe().contentWindow.postMessage('reload', Env.formsUrl);
@@ -52,8 +57,7 @@ export class SsContainerInline {
   render() {
     return (
       <Host>
-        <iframe id='ss-container-iframe' frameborder='0' allowfullScreen title='SkySlope Forms' src={this.getUrl()}
-                style={{ backgroundColor: '#f4f8fc' }} />
+        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={this.getUrl()} style={{ backgroundColor: '#f4f8fc' }} />
       </Host>
     );
   }
