@@ -1,4 +1,4 @@
-import {SkySlopeWidget} from "./globalScript";
+import { SkySlopeWidget } from './globalScript';
 
 export interface ModalProps {
   /**
@@ -36,14 +36,15 @@ export interface ModalProps {
 export interface SkyslopeConfig {
   idp?: string | null;
   openInline?: boolean;
+  headerVariant?: string | null;
 }
 
 declare global {
   interface Window {
     skyslope?: {
       widget?: SkySlopeWidget;
-      onLoad?: () => void
-    }
+      onLoad?: () => void;
+    };
   }
 }
 
