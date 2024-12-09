@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/skyslope/skyslope-forms-widget/compare/v1.2.1...v1.3.0) (2024-12-09)
+
+
+### Features
+
+* extend & improve the headerVariant API ([b776869](https://github.com/skyslope/skyslope-forms-widget/commit/b776869079fc9b128290fed1a8b5aebdc38ec678))
+
 ## [1.2.1](https://github.com/skyslope/skyslope-forms-widget/compare/v1.2.0...v1.2.1) (2024-12-05)
 
 
