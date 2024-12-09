@@ -142,7 +142,15 @@ const init = () =>
   });
 ```
 
-This parameter will instruct the widget to avoid opening a modal and instead render the widget inline.
+This parameter will instruct the widget to avoid opening a modal and instead render the widget inline. You can also optionally pass the `headerVariant: 'focused'` parameter, which controls hiding navigation & settings elements in the header of any `file-details` page in Forms and the Build UI in DigiSign:
+
+```javascript
+const init = () =>
+  window.skyslope.widget.initialize({
+    openInline: true,
+    headerVariant: 'focused',
+  });
+```
 
 Next, you will need to add the following ss-container-inline web component to your HTML or JSX:
 
@@ -344,14 +352,6 @@ All of these functions are used internally by the web-components and are exposed
 - `navigateToBrowseLibraries` navigates to the Browse Libraries page.
 - `navigateToViewAllFiles` navigates to the View All Files page.
 - `navigateToEnvelope(envelopeId: integer)` navigates to the Envelope Bulk Fill page.
-
-## Query Parameters
-
-The SkySlope Forms Widget allows you to customize its behavior by appending the following query parameters to its URL:
-
-| **Parameter**   | **Type** | **Description**                                                                                                               | **Default** | **Example**              |
-| --------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------ |
-| `headerVariant` | `string` | Controls hiding navigation & settings elements in the header of any `file-details` page in Forms and the Build UI in DigiSign | `default`   | `?headerVariant=focused` |
 
 ---
 
