@@ -379,6 +379,7 @@ Depending on the function selected, the SkySlope Forms Widget can post a message
 interface SkySlopeMessage {
   status?:
     | 'forms-onboarding-complete'
+    | 'forms-user-ready'
     | 'forms-edit-contacts'
     | 'forms-download-document'
     | 'forms-create-file'
