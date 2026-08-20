@@ -117,9 +117,23 @@ window.skyslope.widget.initialize({
 });
 ```
 
-If `getToken` throws, the widget does not pass a token and emits an `authTokenError` event on
-the container element so the host page can react (for example, by re-authenticating the user)
-instead of the iframe silently failing. See [Listening for Events](#listening-for-events).
+The token is re-fetched from `getToken` on every navigation, so a navigation later in the
+session carries a fresh token. Note that the Forms app reads the token from the iframe URL
+only at load, so a token that expires mid-session (with no navigation) cannot be renewed
+silently yet — the app reports the failure via the `authError` event described next.
+
+If authentication cannot be established — `getToken` throws, or the embedded Forms app
+reports its own auth failure from inside the iframe — the widget emits an `authError` event
+on the container element (`ss-container-inline` / `ss-container-modal`) so the host page can
+react (for example, by re-authenticating the user) instead of the iframe silently failing:
+
+```javascript
+document.querySelector('ss-container-modal')
+  .addEventListener('authError', event => {
+    // event.detail.reason is 'token-callback-failed' or 'iframe-auth-failed'
+    console.warn('Forms widget auth failed:', event.detail.reason);
+  });
+```
 
 ## Usage with Modal
 
