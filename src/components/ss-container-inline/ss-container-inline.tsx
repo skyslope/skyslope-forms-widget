@@ -6,6 +6,10 @@ import reinitializeGlobalScript from '../../globalScript';
 // dead end, or a token that expired mid-session and could not be renewed.
 const FORMS_AUTH_FAILED = 'forms-auth-failed';
 
+// Sent by the widget TO the Forms app to hand over a fresh token for in-place session
+// renewal (the Forms app imports it without reloading). Paired with a files-ui listener.
+const FORMS_SET_TOKEN = 'set-token';
+
 export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed';
 
 @Component({
@@ -88,6 +92,15 @@ export class SsContainerInline {
     this.iframe().src = this.getUrl();
   };
 
+  // Renew the session in place: fetch a fresh token and hand it to the Forms app via
+  // postMessage (targeted at the Forms origin), so it can swap the token without a reload.
+  // The token stays out of the iframe URL/DOM. No-ops if there is no getToken callback.
+  private refreshToken = async () => {
+    await this.resolveToken();
+    if (this.token == null) return;
+    this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token: this.token }, new URL(Env.formsUrl).origin);
+  };
+
   private handleMessage = (event: MessageEvent) => {
     // Only trust messages from the Forms origin we framed.
     if (event.origin !== new URL(Env.formsUrl).origin) return;
@@ -106,6 +119,7 @@ export class SsContainerInline {
     const { widget } = window.skyslope ?? {};
     widget?.registerReload(this.reloadIframe);
     widget?.registerNavigateTo(this.navigateTo);
+    widget?.registerRefresh(this.refreshToken);
     window.addEventListener('message', this.handleMessage);
   }
 

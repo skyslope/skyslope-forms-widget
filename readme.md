@@ -118,9 +118,12 @@ window.skyslope.widget.initialize({
 ```
 
 The token is re-fetched from `getToken` on every navigation, so a navigation later in the
-session carries a fresh token. Note that the Forms app reads the token from the iframe URL
-only at load, so a token that expires mid-session (with no navigation) cannot be renewed
-silently yet — the app reports the failure via the `authError` event described next.
+session carries a fresh token. To renew a long-lived session without navigating or reloading,
+call `window.skyslope.widget.refreshToken()` when your token rotates: the widget fetches a
+fresh token from `getToken` and hands it to the Forms app via `postMessage` (targeted at the
+Forms origin, so the token stays out of the iframe URL). This requires a Forms version that
+accepts the token handoff; on older versions it is a safe no-op and the token still refreshes
+on navigation.
 
 If authentication cannot be established — `getToken` throws, or the embedded Forms app
 reports its own auth failure from inside the iframe — the widget emits an `authError` event
