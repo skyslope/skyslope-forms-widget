@@ -7,9 +7,9 @@
 
 ## Events
 
-| Event            | Description                                                                                                                                                                                                  | Type                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| `authTokenError` | Emitted when a host-supplied getToken callback throws. Lets the host page react (e.g. re-authenticate the user) instead of the iframe silently dead-ending on the Forms "third-party cookies disabled" page. | `CustomEvent<{ error: unknown; }>` |
+| Event       | Description                                                                                                                                                                                                                                                                                                                                                                                                     | Type                                                               |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `authError` | Emitted when authentication cannot be established for the embedded Forms app, so the host page can react (e.g. re-authenticate the user) instead of the iframe silently dead-ending on the Forms "third-party cookies disabled" page. reason is 'token-callback-failed' when the host getToken callback throws, or 'iframe-auth-failed' when the Forms app reports its own auth failure from inside the iframe. | `CustomEvent<{ reason: WidgetAuthErrorReason; error?: unknown; }>` |
 
 
 ## Dependencies
