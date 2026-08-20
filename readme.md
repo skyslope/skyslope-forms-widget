@@ -99,6 +99,28 @@ If you are not using SSO, you can initialize the widget without an IDP:
 </script>
 ```
 
+### Safari and cookie-free authentication (`getToken`)
+
+By default the embedded Forms app signs the user in using cookies. Safari (and other
+browsers with third-party cookies disabled) blocks cookies inside the widget's iframe, so
+the user cannot sign in and sees a "third-party cookies are disabled" message.
+
+To support these browsers, pass a `getToken` callback. When provided, the widget passes the
+token to the Forms app in the iframe URL fragment, and the app authenticates without cookies.
+`getToken` may be synchronous or return a promise, and is called each time the iframe loads
+(so it can return a fresh token). Return `null` to fall back to the normal cookie-based login.
+
+```javascript
+window.skyslope.widget.initialize({
+  // Return a SkySlope access token for the currently signed-in user.
+  getToken: async () => await myApp.getSkySlopeAccessToken(),
+});
+```
+
+If `getToken` throws, the widget does not pass a token and emits an `authTokenError` event on
+the container element so the host page can react (for example, by re-authenticating the user)
+instead of the iframe silently failing. See [Listening for Events](#listening-for-events).
+
 ## Usage with Modal
 
 A pre-made modal is available for use with the widget. To open the modal, call the openModal function:

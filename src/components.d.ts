@@ -64,6 +64,10 @@ export namespace Components {
     interface SsIconButton {
     }
 }
+export interface SsContainerInlineCustomEvent<T> extends CustomEvent<T> {
+    detail: T;
+    target: HTMLSsContainerInlineElement;
+}
 export interface SsContainerModalCustomEvent<T> extends CustomEvent<T> {
     detail: T;
     target: HTMLSsContainerModalElement;
@@ -154,6 +158,10 @@ declare namespace LocalJSX {
     interface SsContainedWidget {
     }
     interface SsContainerInline {
+        /**
+          * Emitted when a host-supplied getToken callback throws. Lets the host page react (e.g. re-authenticate the user) instead of the iframe silently dead-ending on the Forms "third-party cookies disabled" page.
+         */
+        "onAuthTokenError"?: (event: SsContainerInlineCustomEvent<{ error: unknown }>) => void;
     }
     interface SsContainerModal {
         /**
