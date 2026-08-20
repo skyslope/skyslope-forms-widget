@@ -92,6 +92,32 @@ describe('ss-container-inline token pass-through', () => {
     await component.navigateTo();
     expect(iframeEl.src).toContain('#t=token-2');
   });
+
+  it('refreshToken posts a fresh token to the Forms origin instead of the URL', async () => {
+    let calls = 0;
+    const { component } = makeComponent(() => `token-${++calls}`);
+    const postMessage = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage } });
+
+    await component.componentWillLoad(); // resolves token-1
+    await component.refreshToken(); // should resolve token-2 and post it
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith(
+      { status: 'set-token', token: 'token-2' },
+      'http://localhost:3001' // Env.formsUrl origin in spec
+    );
+  });
+
+  it('refreshToken does not post when no token is available', async () => {
+    const { component } = makeComponent(null);
+    const postMessage = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage } });
+
+    await component.refreshToken();
+
+    expect(postMessage).not.toHaveBeenCalled();
+  });
 });
 
 describe('ss-container-inline auth-failed message handling', () => {

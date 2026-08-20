@@ -11,6 +11,7 @@ export class SkySlopeWidget {
   private _getToken: (() => string | null | Promise<string | null>) | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
+  private _refreshCallback: () => void;
 
   constructor() {
     this._path = '';
@@ -59,6 +60,12 @@ export class SkySlopeWidget {
   reload = () => {
     this._reloadCallback?.();
   };
+  // Push a fresh token to the embedded Forms app (via postMessage, not the URL) so it can
+  // renew a sessionless session without reloading the iframe. Hosts call this when their
+  // token rotates; it is a no-op until an inline container is mounted.
+  refreshToken = () => {
+    this._refreshCallback?.();
+  };
   navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
   navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
@@ -78,6 +85,13 @@ export class SkySlopeWidget {
       throw new Error('Navigate Callback is already defined. Is more than one inline container running?');
     }
     this._navigateCallback = navigateCallback;
+  };
+
+  registerRefresh = (refreshCallback: () => void) => {
+    if (this._refreshCallback) {
+      throw new Error('Refresh Callback is already defined. Is more than one inline container running?');
+    }
+    this._refreshCallback = refreshCallback;
   };
 
   get openInline(): boolean {
