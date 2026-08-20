@@ -8,6 +8,7 @@ export class SkySlopeWidget {
   private _idp: string | null;
   private _openInline: boolean;
   private _headerVariant: string | null;
+  private _getToken: (() => string | null | Promise<string | null>) | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
 
@@ -15,10 +16,11 @@ export class SkySlopeWidget {
     this._path = '';
   }
 
-  initialize = ({ idp, openInline, headerVariant }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null }) => {
+  initialize = ({ idp, openInline, headerVariant, getToken }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null, getToken: null }) => {
     this._idp = idp ?? null;
     this._openInline = openInline ?? false;
     this._headerVariant = headerVariant ?? null;
+    this._getToken = getToken ?? null;
   };
 
   openModal = (
@@ -92,6 +94,10 @@ export class SkySlopeWidget {
 
   get headerVariant(): string {
     return this._headerVariant;
+  }
+
+  get getToken(): (() => string | null | Promise<string | null>) | null {
+    return this._getToken ?? null;
   }
 }
 
