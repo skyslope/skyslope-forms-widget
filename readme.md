@@ -105,10 +105,14 @@ By default the embedded Forms app signs the user in using cookies. Safari (and o
 browsers with third-party cookies disabled) blocks cookies inside the widget's iframe, so
 the user cannot sign in and sees a "third-party cookies are disabled" message.
 
-To support these browsers, pass a `getToken` callback. When provided, the widget passes the
-token to the Forms app in the iframe URL fragment, and the app authenticates without cookies.
-`getToken` may be synchronous or return a promise, and is called each time the iframe loads
-(so it can return a fresh token). Return `null` to fall back to the normal cookie-based login.
+To support these browsers, pass a `getToken` callback. The widget uses it only as a **fallback**:
+the Forms app first loads normally with cookies, and the token is fetched and used **only if the
+app reports that it could not authenticate** (e.g. Safari's third-party-cookie wall). When that
+happens, the widget reloads the iframe with the token in the URL fragment and the app
+authenticates without cookies. Browsers where cookie login works never trigger the fallback and
+never receive a token, so their existing experience is unchanged. `getToken` may be synchronous or
+return a promise; return `null` if no token is available (the widget then surfaces the auth
+failure rather than signing the user in).
 
 ```javascript
 window.skyslope.widget.initialize({
@@ -117,8 +121,8 @@ window.skyslope.widget.initialize({
 });
 ```
 
-The token is re-fetched from `getToken` on every navigation, so a navigation later in the
-session carries a fresh token. To renew a long-lived session without navigating or reloading,
+Once the token fallback is active, the token is re-fetched from `getToken` on every navigation, so
+a navigation later in the session carries a fresh token. To renew a long-lived session without navigating or reloading,
 call `window.skyslope.widget.refreshToken()` when your token rotates: the widget fetches a
 fresh token from `getToken` and hands it to the Forms app via `postMessage` (targeted at the
 Forms origin, so the token stays out of the iframe URL). This requires a Forms version that
