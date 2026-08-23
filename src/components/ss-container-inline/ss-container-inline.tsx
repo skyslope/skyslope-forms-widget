@@ -29,11 +29,18 @@ export class SsContainerInline {
    */
   @Event() authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
-  // The current token. Resolved before the iframe first renders and again on every
-  // navigation, so a navigation late in a session carries a fresh token. The token must be
-  // present on the iframe URL at load: the Forms app reads it from the URL fragment only at
+  // The current token. Null until the cookie-free fallback is triggered (see tokenMode):
+  // the iframe loads WITHOUT a token so browsers whose cookie auth works are unaffected. Once
+  // set, it is carried on the iframe URL fragment at (re)load — the Forms app reads it only at
   // load, so it cannot be handed over after the fact without reloading the frame.
   private token: string | null = null;
+
+  // Cookie-free fallback state. Starts false: the iframe loads normally (cookies) and no token
+  // is injected. Flips to true only when the Forms app reports an in-iframe auth failure (e.g.
+  // Safari's third-party-cookie wall) and a getToken callback exists. Once true, tokens are
+  // resolved and injected on (re)load. Browsers where cookies work never reach this, so they
+  // never receive a token. Also acts as the single-attempt guard against a reload loop.
+  private tokenMode = false;
 
   private async resolveToken(): Promise<void> {
     const getToken = window.skyslope?.widget?.getToken;
@@ -44,10 +51,6 @@ export class SsContainerInline {
       this.token = null;
       this.authError.emit({ reason: 'token-callback-failed', error });
     }
-  }
-
-  async componentWillLoad() {
-    await this.resolveToken();
   }
 
   private addUrlParams(url: string, params: Record<string, string> | string | URLSearchParams): string {
@@ -87,8 +90,10 @@ export class SsContainerInline {
   };
 
   private navigateTo = async () => {
-    // Refresh the token first so a navigation late in the session doesn't reuse a stale one.
-    await this.resolveToken();
+    // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
+    // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
+    // leaves the token null, so navigation never introduces a token.
+    if (this.tokenMode) await this.resolveToken();
     this.iframe().src = this.getUrl();
   };
 
@@ -111,8 +116,28 @@ export class SsContainerInline {
       return;
     }
     if (data?.status === FORMS_AUTH_FAILED) {
-      this.authError.emit({ reason: 'iframe-auth-failed' });
+      void this.handleAuthFailed();
     }
+  };
+
+  // The Forms app could not authenticate inside the iframe (e.g. Safari's third-party-cookie
+  // wall). If a getToken callback exists and we have not already tried, switch to the cookie-free
+  // path: fetch a token and reload the iframe with it in the URL fragment. Browsers where the
+  // cookie flow works never send FORMS_AUTH_FAILED, so they never enter tokenMode. If there is no
+  // token path, or the token fallback itself failed (a second failure), surface it to the host.
+  private handleAuthFailed = async () => {
+    const getToken = window.skyslope?.widget?.getToken;
+    if (getToken == null || this.tokenMode) {
+      this.authError.emit({ reason: 'iframe-auth-failed' });
+      return;
+    }
+    this.tokenMode = true;
+    await this.resolveToken();
+    if (this.token == null) {
+      this.authError.emit({ reason: 'iframe-auth-failed' });
+      return;
+    }
+    this.iframe().src = this.getUrl();
   };
 
   connectedCallback() {
