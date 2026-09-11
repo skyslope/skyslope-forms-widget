@@ -25,6 +25,10 @@ export class SsContainerInline {
         widgetSourceEvent: 'click',
         widgetSourceUrl: widget.path,
       }),
+      // Tells the Forms gateway which page is framing it, so it can allow this origin in
+      // frame-ancestors without the third-party cookie that Safari blocks. Same value as
+      // widgetTrack.widgetOrigin; the gateway checks it against the partner whitelist.
+      frameOrigin: window.location.origin,
     };
 
     if (widget.idp) params.idp = widget.idp;
