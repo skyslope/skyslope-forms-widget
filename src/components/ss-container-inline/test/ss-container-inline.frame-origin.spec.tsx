@@ -44,6 +44,20 @@ describe('ss-container-inline frameOrigin (AP-3436)', () => {
     expect(raw).not.toContain('#');
   });
 
+  it('omits frameOrigin when the page has an opaque origin ("null")', () => {
+    stubWidget();
+    const original = window.location;
+    delete (window as any).location;
+    (window as any).location = { ...original, origin: 'null' };
+    try {
+      const url = new URL((new SsContainerInline() as any).getUrl());
+      expect(url.searchParams.has('frameOrigin')).toBe(false);
+      expect(url.searchParams.has('widgetTrack')).toBe(true);
+    } finally {
+      (window as any).location = original;
+    }
+  });
+
   it('keeps the widget path and the other params intact', () => {
     stubWidget('/create');
     (window as any).skyslope.widget.headerVariant = 'focused';
