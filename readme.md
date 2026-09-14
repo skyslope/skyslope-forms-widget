@@ -371,6 +371,19 @@ https://forms.skyslope.com/file-details/{fileId}/{route}?headerVariant=focused
 https://send.skyslope.com/envelopes/{envelopeId}?headerVariant=focused
 ```
 
+## Framing in Safari and other cookie-blocked browsers
+
+The widget appends `?frameOrigin=<origin of the host page>` to the Forms iframe URL. This is the same
+value it already reports as `widgetTrack.widgetOrigin`; no new information leaves the host page.
+
+Forms is served with a `frame-ancestors` policy that only lists the partner origin a request presents.
+Historically that came from the `Referer` and a `.skyslope.com` cookie. Safari, Chrome incognito and
+Firefox strict mode block that third-party cookie, so nested loads inside the iframe (for example
+opening a file) lost the partner origin and rendered blank. The `frameOrigin` param carries it in the
+URL instead. It is validated server-side against the partner whitelist and the browser still enforces
+`frame-ancestors` against the real top-level page, so a forged value cannot allow framing from an
+unregistered site. Partners that iframe Forms directly without the widget are unaffected.
+
 ## Listening for Events
 
 Depending on the function selected, the SkySlope Forms Widget can post a message containing information relevant to further data querying. For example, after calling `navigateToCreateTransaction`:
