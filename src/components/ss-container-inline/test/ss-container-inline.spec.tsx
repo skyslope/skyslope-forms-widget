@@ -170,14 +170,21 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
     );
   });
 
-  it('does not post when no token is available', async () => {
-    const { component } = makeComponent(null);
+  // A cookie-based host has no getToken. If it calls refreshToken() anyway - and the native
+  // web view is the same shape - the call must do nothing at all. Asserting only "did not
+  // post" is not enough: an earlier version of this silently armed a retry timer and then
+  // raised token-renewal-failed at a host that had never opted into the token path.
+  it('is a silent no-op when the host configured no getToken', async () => {
+    const { component, emitted } = makeComponent(null);
     const postMessage = jest.fn();
     component.iframe = () => ({ contentWindow: { postMessage } });
 
     await component.refreshToken();
+    await component.refreshToken();
 
     expect(postMessage).not.toHaveBeenCalled();
+    expect(component.renewalTimer).toBeNull();
+    expect(emitted).toEqual([]);
   });
 });
 

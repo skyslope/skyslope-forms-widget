@@ -151,6 +151,11 @@ export class SsContainerInline {
   // own refreshToken() call, where an early rotation is intentional and the staleness check
   // would only get in the way.
   private renewNow = async (force = false): Promise<void> => {
+    // No token path configured - a cookie-based host, or the native web view. There is
+    // nothing to renew and nothing has gone wrong, so this is a silent no-op: no retry
+    // timer, no authError. Only the token path can fail to renew.
+    if (readGetToken() == null) return;
+
     const previousExpiry = this.expiresAt;
     await this.resolveToken();
     if (this.token == null) {
