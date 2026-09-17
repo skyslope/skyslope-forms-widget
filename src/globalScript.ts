@@ -3,12 +3,24 @@
 import { ModalProps, SkyslopeConfig } from './window';
 import { SkyslopePaths } from './components/ss-container-inline/types';
 
+export type GetTokenCallback = () => string | null | Promise<string | null>;
+
+// The host's token callback is kept in module scope, NOT as a property of the widget the page
+// can reach. Script running on the host page could already get at the host's own token, so
+// this grants nobody a new capability - but it avoids handing every site that embeds us the
+// same well-known global to call, which is what would make a generic payload worth writing.
+let storedGetToken: GetTokenCallback | null = null;
+
+// Read by the inline container. Not exposed on window.skyslope.widget.
+export function readGetToken(): GetTokenCallback | null {
+  return storedGetToken;
+}
+
 export class SkySlopeWidget {
   private _path: string;
   private _idp: string | null;
   private _openInline: boolean;
   private _headerVariant: string | null;
-  private _getToken: (() => string | null | Promise<string | null>) | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
   private _refreshCallback: () => void;
@@ -21,7 +33,7 @@ export class SkySlopeWidget {
     this._idp = idp ?? null;
     this._openInline = openInline ?? false;
     this._headerVariant = headerVariant ?? null;
-    this._getToken = getToken ?? null;
+    storedGetToken = getToken ?? null;
   };
 
   openModal = (
@@ -109,13 +121,10 @@ export class SkySlopeWidget {
   get headerVariant(): string {
     return this._headerVariant;
   }
-
-  get getToken(): (() => string | null | Promise<string | null>) | null {
-    return this._getToken ?? null;
-  }
 }
 
 export default function () {
+  storedGetToken = null;
   if (!window.skyslope) window.skyslope = {};
   const onLoad = window.skyslope?.onLoad;
   window.skyslope.widget = new SkySlopeWidget();

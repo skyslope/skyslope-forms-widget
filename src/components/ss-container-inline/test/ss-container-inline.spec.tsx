@@ -2,6 +2,7 @@
 import '@stencil/core/testing';
 import { Env } from '@stencil/core';
 import { SsContainerInline } from '../ss-container-inline';
+import { SkySlopeWidget } from '../../../globalScript';
 
 // The real `stencil test` injects env from stencil.config (dev formsUrl = http://localhost:3001/).
 // Set it here too so getUrl() / the message handlers have a formsUrl when the spec is executed
@@ -20,18 +21,20 @@ Env.formsUrl = Env.formsUrl ?? 'http://localhost:3001/';
 // in-iframe auth failure (forms-auth-failed) and a getToken callback exists.
 type GetToken = () => string | null | Promise<string | null>;
 
+// getToken is NOT a property of the widget instance - initialize() stores it in module scope
+// so embedding pages have no standardized global to call. Drive it through the real
+// initialize() rather than hand-stubbing, so these tests exercise the actual wiring.
 function stubWidget(getToken: GetToken | null = null) {
-  (window as any).skyslope = {
-    widget: {
-      path: '',
-      idp: null,
-      headerVariant: null,
-      getToken,
-      registerReload: () => undefined,
-      registerNavigateTo: () => undefined,
-      registerRefresh: () => undefined,
-    },
-  };
+  const widget = new SkySlopeWidget();
+  widget.initialize({ getToken });
+  (window as any).skyslope = { widget };
+}
+
+// Build a decode-only JWT with a given lifetime. Nothing verifies the signature on the paths
+// under test - the widget only reads `exp` to decide when to ask for the next token.
+function jwtExpiringIn(seconds: number, marker = 'tok'): string {
+  const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + seconds, marker })).toString('base64');
+  return `header.${payload}.signature`;
 }
 
 function makeComponent(getToken: GetToken | null): {
@@ -212,5 +215,154 @@ describe('ss-container-inline message handling / origin trust', () => {
     component.handleMessage(messageEvent('http://localhost:3001', JSON.stringify({ status: 'forms-user-ready' })));
     component.handleMessage(messageEvent('http://localhost:3001', 'not-json{'));
     expect(emitted).toEqual([]);
+  });
+});
+
+// The renewal timer lives in the host page, which is why it survives Forms navigating away.
+// These tests assert the SCHEDULE rather than advancing wall-clock time: what matters is when
+// we decide to ask for the next token, and that a bad answer never re-arms a tight loop.
+describe('ss-container-inline renewal scheduling', () => {
+  // resolveToken also arms a timer (the getToken deadline), so a flat list of delays cannot
+  // tell us which one is the renewal. Hand out an id per call and look up the one the
+  // component actually kept as its renewal timer.
+  let timers: Array<{ id: number; ms: number }>;
+  let realSetTimeout: typeof setTimeout;
+  let nextId: number;
+
+  beforeEach(() => {
+    timers = [];
+    nextId = 1;
+    realSetTimeout = global.setTimeout;
+    (global as any).setTimeout = (_fn: any, ms?: number) => {
+      const id = nextId++;
+      timers.push({ id, ms: ms ?? 0 });
+      return id;
+    };
+  });
+
+  afterEach(() => {
+    (global as any).setTimeout = realSetTimeout;
+    delete (window as any).skyslope;
+  });
+
+  // The delay the component is actually waiting on before it next asks for a token.
+  function renewalDelay(component: any): number | null {
+    if (component.renewalTimer == null) return null;
+    const timer = timers.find(t => t.id === component.renewalTimer);
+    return timer != null ? timer.ms : null;
+  }
+
+  // exp is minted in whole seconds and read back a few ms later, so compare with tolerance.
+  function expectDelayNear(actual: number | null, expected: number) {
+    expect(actual).not.toBeNull();
+    expect(Math.abs((actual as number) - expected)).toBeLessThan(2000);
+  }
+
+  function withIframe(component: any) {
+    const postMessage = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+    return postMessage;
+  }
+
+  it('arms a renewal once the token path is entered, capped at 80% of a long token life', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    // 1h token: the 5-minute lead would mean waiting 55 min (92% of its life), so the 80% cap
+    // binds instead and absorbs clock skew between the user's machine and the issuer.
+    expectDelayNear(renewalDelay(component), 3600_000 * 0.8);
+  });
+
+  it('uses the 5-minute lead when that is sooner than the 80% cap', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(1200));
+    withIframe(component);
+    await component.handleAuthFailed();
+    // 20m token: lead => 15 min, cap => 16 min. The lead is sooner.
+    expectDelayNear(renewalDelay(component), 1200_000 - 5 * 60_000);
+  });
+
+  it('renews immediately when the token is already inside the lead window', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(120));
+    withIframe(component);
+    await component.handleAuthFailed();
+    expect(renewalDelay(component)).toBe(0);
+  });
+
+  it('arms no renewal at all for a token whose exp cannot be decoded', async () => {
+    const { component } = makeComponent(() => 'not.a.jwt');
+    withIframe(component);
+    await component.handleAuthFailed();
+    expect(component.renewalTimer).toBeNull();
+  });
+
+  it('renews by posting set-token to the Forms origin, never by reloading', async () => {
+    let call = 0;
+    const { component, iframeEl } = makeComponent(() => (++call === 1 ? jwtExpiringIn(3600, 'first') : jwtExpiringIn(7200, 'second')));
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    const srcAfterBootstrap = iframeEl.src;
+
+    await component.renewNow();
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    const [payload, targetOrigin] = postMessage.mock.calls[0];
+    expect(payload.status).toBe('set-token');
+    expect(payload.token).toBe(component.token);
+    // The replacement really is a different token, not the bootstrap one re-sent.
+    expect(payload.token).not.toBe(srcAfterBootstrap.split('#t=')[1]);
+    // The token must go to the exact Forms origin. A '*' target would hand it to any listener.
+    expect(targetOrigin).toBe('http://localhost:3001');
+    // Renewal is in place: the iframe URL is untouched, so form state survives.
+    expect(iframeEl.src).toBe(srcAfterBootstrap);
+  });
+
+  it('re-arms on the expiry Forms reports, not the one the host token carried', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    // After the exchange the session can be running on a token with a different lifetime;
+    // the ack carries the one that actually matters.
+    const sessionExp = Math.floor(Date.now() / 1000) + 1200;
+
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    expectDelayNear(renewalDelay(component), 1200_000 - 5 * 60_000);
+  });
+
+  it('treats a host that hands back a no-later token as a failed renewal', async () => {
+    // Same lifetime every call: a cached, near-dead token.
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    postMessage.mockClear();
+
+    await component.renewNow();
+
+    expect(postMessage).not.toHaveBeenCalled(); // never pushed to Forms
+    expect(renewalDelay(component)).toBe(30_000); // backed off to a retry, not re-armed tight
+  });
+
+  it('reports to the host only after a renewal fails twice', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    emitted.length = 0;
+
+    component.handleTokenInstalled({ ok: false });
+    expect(emitted).toEqual([]); // the current token still works; retry first
+
+    component.handleTokenInstalled({ ok: false });
+    expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
+  });
+
+  it('clears a pending renewal when the container goes away', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    expect(component.renewalTimer).not.toBeNull();
+
+    component.disconnectedCallback();
+
+    expect(component.renewalTimer).toBeNull();
   });
 });
