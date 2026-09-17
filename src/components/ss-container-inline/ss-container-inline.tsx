@@ -1,5 +1,5 @@
 import { Component, Host, h, Env, Element, Event, EventEmitter } from '@stencil/core';
-import reinitializeGlobalScript from '../../globalScript';
+import reinitializeGlobalScript, { readGetToken } from '../../globalScript';
 
 // Status sent by the embedded Forms app (files-ui PostMessageStatus) when its own
 // authentication fails inside the iframe — e.g. the "third-party cookies disabled"
@@ -10,7 +10,32 @@ const FORMS_AUTH_FAILED = 'forms-auth-failed';
 // renewal (the Forms app imports it without reloading). Paired with a files-ui listener.
 const FORMS_SET_TOKEN = 'set-token';
 
-export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed';
+// Sent back by the Forms app once it has tried to install a token we pushed. Carries the
+// expiry of the token the SESSION ended up with, which is what we re-arm the timer on.
+const FORMS_TOKEN_INSTALLED = 'token-installed';
+
+// Ask the host for a fresh token this long before the current one expires. Long enough to
+// absorb a slow host plus one retry, short enough that the replacement is still fresh.
+const RENEWAL_LEAD_MS = 5 * 60 * 1000;
+
+// Never hold a token for more than this share of its life. A short-lived token would
+// otherwise expire before a fixed five-minute lead ever came round, and it leaves room for
+// clock skew between the user's machine and the issuer.
+const MAX_LIFETIME_SHARE = 0.8;
+
+// How long the host's getToken gets before we call the renewal failed. Without this, a
+// callback that never settles would let the session die with nothing reported.
+const GET_TOKEN_TIMEOUT_MS = 30 * 1000;
+
+// A failed renewal is not fatal — the current token keeps working until it really expires —
+// so wait a little and try once more before telling the host.
+const RENEWAL_RETRY_MS = 30 * 1000;
+
+// A replacement token has to outlive the one it replaces by at least this much. A host that
+// hands back the same near-dead token from a cache would otherwise put us in a tight loop.
+const MIN_EXPIRY_GAIN_MS = 60 * 1000;
+
+export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed' | 'token-renewal-failed';
 
 @Component({
   tag: 'ss-container-inline',
@@ -21,18 +46,18 @@ export class SsContainerInline {
   @Element() el: HTMLSsContainerInlineElement;
 
   /**
-   * Emitted when authentication cannot be established for the embedded Forms app, so the
-   * host page can react (e.g. re-authenticate the user) instead of the iframe silently
-   * dead-ending on the Forms "third-party cookies disabled" page. reason is
-   * 'token-callback-failed' when the host getToken callback throws, or 'iframe-auth-failed'
-   * when the Forms app reports its own auth failure from inside the iframe.
+   * Emitted when authentication cannot be established or kept for the embedded Forms app, so
+   * the host page can react (e.g. re-authenticate the user) instead of the iframe silently
+   * dead-ending. reason is 'token-callback-failed' when the host getToken callback throws or
+   * times out, 'iframe-auth-failed' when the Forms app reports its own auth failure from
+   * inside the iframe, and 'token-renewal-failed' when a renewal could not be completed
+   * before the current token ran out.
    */
   @Event() authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
-  // The current token. Null until the cookie-free fallback is triggered (see tokenMode):
-  // the iframe loads WITHOUT a token so browsers whose cookie auth works are unaffected. Once
-  // set, it is carried on the iframe URL fragment at (re)load — the Forms app reads it only at
-  // load, so it cannot be handed over after the fact without reloading the frame.
+  // The token most recently handed to the Forms app. Null until the cookie-free fallback is
+  // triggered (see tokenMode): the iframe loads WITHOUT a token so browsers whose cookie auth
+  // works are unaffected.
   private token: string | null = null;
 
   // Cookie-free fallback state. Starts false: the iframe loads normally (cookies) and no token
@@ -42,16 +67,147 @@ export class SsContainerInline {
   // never receive a token. Also acts as the single-attempt guard against a reload loop.
   private tokenMode = false;
 
+  // When the token the session is running on expires, in epoch ms. Null while we are not on
+  // the token path or the token could not be decoded.
+  private expiresAt: number | null = null;
+
+  // ReturnType<typeof setTimeout> rather than number: @types/node is in scope here, so the
+  // bare global is typed as Node's Timeout. This form is correct in both environments.
+  private renewalTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // One retry is allowed per renewal round; it resets when a renewal succeeds.
+  private renewalRetryUsed = false;
+
+  // Read the `exp` claim without verifying the signature. The widget is not the thing that
+  // trusts this token — it only needs to know when to go and ask for the next one.
+  private decodeExpiry(jwt: string | null): number | null {
+    if (jwt == null) return null;
+    try {
+      const payload = jwt.split('.')[1];
+      if (payload == null || payload === '') return null;
+      const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+      const exp = JSON.parse(json)?.exp;
+      return typeof exp === 'number' && isFinite(exp) ? exp * 1000 : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearRenewalTimer(): void {
+    if (this.renewalTimer != null) {
+      clearTimeout(this.renewalTimer);
+      this.renewalTimer = null;
+    }
+  }
+
+  // Arm the next renewal. An undecodable token simply gets no timer — we would be guessing.
+  private scheduleRenewal(expiresAt: number | null): void {
+    this.clearRenewalTimer();
+    this.expiresAt = expiresAt;
+    if (expiresAt == null) return;
+
+    const lifetime = expiresAt - Date.now();
+    if (lifetime <= 0) {
+      void this.renewNow();
+      return;
+    }
+    // Whichever comes first: the fixed lead before expiry, or 80% through the token's life.
+    const delay = Math.max(0, Math.min(lifetime - RENEWAL_LEAD_MS, lifetime * MAX_LIFETIME_SHARE));
+    this.renewalTimer = setTimeout(() => {
+      void this.renewNow();
+    }, delay);
+  }
+
+  // Give the host's callback a deadline. A promise that never settles is otherwise
+  // indistinguishable from a host that is simply slow.
+  private withTimeout(pending: Promise<string | null>): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('getToken timed out')), GET_TOKEN_TIMEOUT_MS);
+      pending.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value ?? null);
+        },
+        error => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private async resolveToken(): Promise<void> {
-    const getToken = window.skyslope?.widget?.getToken;
+    const getToken = readGetToken();
     if (getToken == null) return;
     try {
-      this.token = (await getToken()) ?? null;
+      this.token = await this.withTimeout(Promise.resolve(getToken()));
     } catch (error) {
       this.token = null;
       this.authError.emit({ reason: 'token-callback-failed', error });
     }
   }
+
+  // Fetch a fresh token and hand it to the Forms app in place. `force` is used by the host's
+  // own refreshToken() call, where an early rotation is intentional and the staleness check
+  // would only get in the way.
+  private renewNow = async (force = false): Promise<void> => {
+    const previousExpiry = this.expiresAt;
+    await this.resolveToken();
+    if (this.token == null) {
+      this.handleRenewalFailure();
+      return;
+    }
+
+    const nextExpiry = this.decodeExpiry(this.token);
+    if (!force && previousExpiry != null && nextExpiry != null && nextExpiry - previousExpiry < MIN_EXPIRY_GAIN_MS) {
+      // The host handed back something that expires no later than what we already had.
+      this.handleRenewalFailure();
+      return;
+    }
+
+    this.postTokenToForms(this.token);
+    // Arm on what we can see for now. Forms answers with the expiry of the token the session
+    // actually ended up using — after an exchange that can differ — and we re-arm on that.
+    this.scheduleRenewal(nextExpiry);
+  };
+
+  private handleRenewalFailure(): void {
+    // The current token still works until it really expires, so one failure is not the end.
+    if (!this.renewalRetryUsed) {
+      this.renewalRetryUsed = true;
+      this.clearRenewalTimer();
+      this.renewalTimer = setTimeout(() => {
+        void this.renewNow();
+      }, RENEWAL_RETRY_MS);
+      return;
+    }
+    this.clearRenewalTimer();
+    this.authError.emit({ reason: 'token-renewal-failed' });
+  }
+
+  // Always targeted at the exact Forms origin. A '*' target would hand the token to whatever
+  // happened to be listening.
+  private postTokenToForms(token: string): void {
+    this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token }, new URL(Env.formsUrl).origin);
+  }
+
+  private handleTokenInstalled(data: { ok?: boolean; exp?: number }): void {
+    if (data.ok === false) {
+      this.handleRenewalFailure();
+      return;
+    }
+    this.renewalRetryUsed = false;
+    const installedExpiry = typeof data.exp === 'number' && isFinite(data.exp) ? data.exp * 1000 : this.expiresAt;
+    this.scheduleRenewal(installedExpiry);
+  }
+
+  // Background tabs throttle timers, so a widget that has been hidden for a long time can come
+  // back already past its renewal point. Check on the way in rather than trusting the timer.
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState !== 'visible') return;
+    if (!this.tokenMode || this.expiresAt == null) return;
+    if (Date.now() >= this.expiresAt - RENEWAL_LEAD_MS) void this.renewNow();
+  };
 
   private addUrlParams(url: string, params: Record<string, string> | string | URLSearchParams): string {
     const urlObj = new URL(url);
@@ -97,19 +253,17 @@ export class SsContainerInline {
     this.iframe().src = this.getUrl();
   };
 
-  // Renew the session in place: fetch a fresh token and hand it to the Forms app via
-  // postMessage (targeted at the Forms origin), so it can swap the token without a reload.
-  // The token stays out of the iframe URL/DOM. No-ops if there is no getToken callback.
+  // Renew the session in place. Exposed to the host as widget.refreshToken() for the case
+  // where its own token rotates early (an account switch, say) — the normal five-minute
+  // renewal is driven by our own timer and needs nothing from the host.
   private refreshToken = async () => {
-    await this.resolveToken();
-    if (this.token == null) return;
-    this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token: this.token }, new URL(Env.formsUrl).origin);
+    await this.renewNow(true);
   };
 
   private handleMessage = (event: MessageEvent) => {
     // Only trust messages from the Forms origin we framed.
     if (event.origin !== new URL(Env.formsUrl).origin) return;
-    let data: { status?: string };
+    let data: { status?: string; ok?: boolean; exp?: number };
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
     } catch {
@@ -117,6 +271,10 @@ export class SsContainerInline {
     }
     if (data?.status === FORMS_AUTH_FAILED) {
       void this.handleAuthFailed();
+      return;
+    }
+    if (data?.status === FORMS_TOKEN_INSTALLED) {
+      this.handleTokenInstalled(data);
     }
   };
 
@@ -126,7 +284,7 @@ export class SsContainerInline {
   // cookie flow works never send FORMS_AUTH_FAILED, so they never enter tokenMode. If there is no
   // token path, or the token fallback itself failed (a second failure), surface it to the host.
   private handleAuthFailed = async () => {
-    const getToken = window.skyslope?.widget?.getToken;
+    const getToken = readGetToken();
     if (getToken == null || this.tokenMode) {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
@@ -138,6 +296,8 @@ export class SsContainerInline {
       return;
     }
     this.iframe().src = this.getUrl();
+    // From here the session lives on a token with a finite life, so start watching it.
+    this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
   connectedCallback() {
@@ -146,10 +306,13 @@ export class SsContainerInline {
     widget?.registerNavigateTo(this.navigateTo);
     widget?.registerRefresh(this.refreshToken);
     window.addEventListener('message', this.handleMessage);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
   disconnectedCallback() {
     window.removeEventListener('message', this.handleMessage);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    this.clearRenewalTimer();
     // this is not actually needed, but I think makes more sense to reinitialize the globalScript stuff if this component isn't alive
     reinitializeGlobalScript();
   }
