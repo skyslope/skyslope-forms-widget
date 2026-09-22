@@ -349,6 +349,31 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(renewalDelay(component)).toBe(30_000); // backed off to a retry, not re-armed tight
   });
 
+  it('treats an install that does not move the session expiry as a failed renewal', async () => {
+    // The token exchange hands back the same internal token for a user for its whole life, so a
+    // renewal can report success while buying no extra time. Re-arming on that expiry would
+    // schedule the next attempt at zero delay and spin.
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    emitted.length = 0;
+
+    // First ack establishes what the SESSION expires at - nothing to compare against yet.
+    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+    expect(emitted).toEqual([]);
+
+    timers.length = 0;
+    // A renewal that reports the SAME session expiry bought no time.
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    expect(renewalDelay(component)).toBe(30_000); // backed off, NOT re-armed at zero
+    expect(emitted).toEqual([]); // first failure stays quiet; the old token still works
+
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+    expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
+  });
+
   it('reports to the host only after a renewal fails twice', async () => {
     const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);
