@@ -271,25 +271,25 @@ describe('ss-container-inline renewal scheduling', () => {
     return postMessage;
   }
 
-  it('arms a renewal once the token path is entered, capped at 80% of a long token life', async () => {
+  it('arms the renewal to land inside the exchange cache window, not early', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);
     await component.handleAuthFailed();
-    // 1h token: the 5-minute lead would mean waiting 55 min (92% of its life), so the 80% cap
-    // binds instead and absorbs clock skew between the user's machine and the issuer.
-    expectDelayNear(renewalDelay(component), 3600_000 * 0.8);
+    // The exchange serves one cached token per user until a TTL sweep drops it five minutes
+    // before expiry, so renewing early returns the SAME token and buys nothing. Three minutes
+    // out clears the sweep and still leaves runway. An hour-long token waits 57 minutes.
+    expectDelayNear(renewalDelay(component), 3600_000 - 3 * 60_000);
   });
 
-  it('uses the 5-minute lead when that is sooner than the 80% cap', async () => {
+  it('uses the same lead regardless of how long the token lives', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(1200));
     withIframe(component);
     await component.handleAuthFailed();
-    // 20m token: lead => 15 min, cap => 16 min. The lead is sooner.
-    expectDelayNear(renewalDelay(component), 1200_000 - 5 * 60_000);
+    expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
   });
 
   it('renews immediately when the token is already inside the lead window', async () => {
-    const { component } = makeComponent(() => jwtExpiringIn(120));
+    const { component } = makeComponent(() => jwtExpiringIn(60));
     withIframe(component);
     await component.handleAuthFailed();
     expect(renewalDelay(component)).toBe(0);
@@ -333,7 +333,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
     component.handleTokenInstalled({ ok: true, exp: sessionExp });
 
-    expectDelayNear(renewalDelay(component), 1200_000 - 5 * 60_000);
+    expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
   });
 
   it('treats a host that hands back a no-later token as a failed renewal', async () => {
