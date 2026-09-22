@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   commitlint:
-    runs-on: ubuntu-latest
+    runs-on: skyslope-ops
+    env:
+      # skyslope-ops is ARM64; puppeteer 19 has no linux-arm64 Chromium and fails npm ci.
+      # This job does not run a browser.
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
