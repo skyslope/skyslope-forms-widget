@@ -78,6 +78,11 @@ export class SsContainerInline {
   // One retry is allowed per renewal round; it resets when a renewal succeeds.
   private renewalRetryUsed = false;
 
+  // The last expiry Forms reported for the SESSION. Distinct from expiresAt, which starts out as
+  // the expiry of a token we sent — those two can legitimately differ, so only this is comparable
+  // from one renewal to the next.
+  private lastReportedExpiry: number | null = null;
+
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
   private decodeExpiry(jwt: string | null): number | null {
@@ -201,8 +206,30 @@ export class SsContainerInline {
       this.handleRenewalFailure();
       return;
     }
-    this.renewalRetryUsed = false;
+
     const installedExpiry = typeof data.exp === 'number' && isFinite(data.exp) ? data.exp * 1000 : this.expiresAt;
+
+    // A renewal that leaves the session expiring at the same moment has not renewed anything.
+    // This is not hypothetical: the token exchange returns the SAME internal token for a given
+    // user for that token's whole life, so handing it a fresh partner token buys no extra time.
+    // Re-arming on an unchanged expiry schedules the next attempt at zero delay and spins, so
+    // treat it as a failed renewal — back off, then tell the host, which is the only actor that
+    // can do anything about it.
+    //
+    // Compared against the last expiry FORMS reported, never against the expiry of a token we
+    // sent: the session's token can legitimately outlive or undercut the one handed over, and
+    // that difference is the whole reason the acknowledgement carries an expiry at all.
+    if (
+      this.lastReportedExpiry != null &&
+      installedExpiry != null &&
+      installedExpiry - this.lastReportedExpiry < MIN_EXPIRY_GAIN_MS
+    ) {
+      this.handleRenewalFailure();
+      return;
+    }
+
+    this.lastReportedExpiry = installedExpiry;
+    this.renewalRetryUsed = false;
     this.scheduleRenewal(installedExpiry);
   }
 
