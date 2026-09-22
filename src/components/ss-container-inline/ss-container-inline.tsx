@@ -14,14 +14,16 @@ const FORMS_SET_TOKEN = 'set-token';
 // expiry of the token the SESSION ended up with, which is what we re-arm the timer on.
 const FORMS_TOKEN_INSTALLED = 'token-installed';
 
-// Ask the host for a fresh token this long before the current one expires. Long enough to
-// absorb a slow host plus one retry, short enough that the replacement is still fresh.
-const RENEWAL_LEAD_MS = 5 * 60 * 1000;
-
-// Never hold a token for more than this share of its life. A short-lived token would
-// otherwise expire before a fixed five-minute lead ever came round, and it leaves room for
-// clock skew between the user's machine and the issuer.
-const MAX_LIFETIME_SHARE = 0.8;
+// Ask the host for a fresh token this long before the current one expires.
+//
+// This has to land inside a specific window, and renewing EARLIER is not safer — it is useless.
+// The token exchange caches one internal token per user and serves it to every exchange request
+// until a TTL sweep drops the cache entry five minutes before that token expires. Ask any sooner
+// and the exchange hands back the same token the session is already running on, so the renewal
+// buys nothing. Mongo's TTL monitor runs about once a minute, so an entry due at five minutes
+// out is really gone somewhere between five and four minutes out; three minutes clears that with
+// a full sweep to spare, and still leaves enough runway for the round trip and one retry.
+const RENEWAL_LEAD_MS = 3 * 60 * 1000;
 
 // How long the host's getToken gets before we call the renewal failed. Without this, a
 // callback that never settles would let the session die with nothing reported.
@@ -116,8 +118,8 @@ export class SsContainerInline {
       void this.renewNow();
       return;
     }
-    // Whichever comes first: the fixed lead before expiry, or 80% through the token's life.
-    const delay = Math.max(0, Math.min(lifetime - RENEWAL_LEAD_MS, lifetime * MAX_LIFETIME_SHARE));
+    // A token with less life left than the lead is already inside the window, so go now.
+    const delay = Math.max(0, lifetime - RENEWAL_LEAD_MS);
     this.renewalTimer = setTimeout(() => {
       void this.renewNow();
     }, delay);
