@@ -167,3 +167,17 @@ Start with isolated tests using synthetic origins and mock frames: URL construct
 - Source-derived in-memory checks used the real controller and extracted URL-construction methods with mocked globals and synthetic `.invalid` origins. They confirmed parameter encoding/tracking, configured-origin preservation for an absolute-looking path, duplicate callback rejection, configuration loss on reset, and browser-origin scheme semantics. An initial harness-only syntax mistake was corrected before the successful run; no repository source was edited for testing.
 - `node --check` passed for `release.config.js` and `deployment/getPackageVersion.js`. Package, lockfile, TypeScript configuration, and ESLint JSON parsed successfully.
 - These are narrow source/contract checks, not a Stencil component build or real cross-origin browser test. Full spec/E2E tests, dependency installation, remote header checks, package publishing, and live integrations were not run.
+
+<!-- daybreak-related-source-policy:v1 -->
+## Daybreak related-source policy
+
+Daybreak reads `.s4.toml` only from the pull request's base commit. The policy
+allows the reviewer to fetch the listed SkySlope repositories on demand with
+repository-scoped, read-only credentials. The broker permits at most fifteen fetch
+attempts per review. Related source is disclosed to OpenAI and may appear in this
+repository's Actions logs and review comments. A listed branch or tag identifies
+inspected source, not the revision deployed to production. The allow-list does not
+authorize application access or isolate workflow writers who can use the
+source-reader credential outside the broker. The shared workflow's
+[threat model](https://github.com/skyslope/.github/blob/main/docs/threat-model.md)
+describes these controls and their limits.
