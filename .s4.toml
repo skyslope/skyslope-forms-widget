@@ -1,0 +1,147 @@
+# Related-source allow-list from skyslope/.github APP_CONSTELLATIONS.md.
+# Fetch on demand; default branches do not identify production deployments.
+version = 1
+
+[sources.car_reporting_faas]
+repository = "skyslope/car-reporting-faas"
+ref = "refs/heads/master"
+
+[sources.data_forms_profiles_lambdas]
+repository = "skyslope/data-forms-profiles-lambdas"
+ref = "refs/heads/master"
+
+[sources.dtm_to_forms_api]
+repository = "skyslope/dtm-to-forms-api"
+ref = "refs/heads/master"
+
+[sources.dtm_to_forms_api_csharp]
+repository = "skyslope/dtm-to-forms-api-csharp"
+ref = "refs/heads/master"
+
+[sources.experimental_mapping_tool]
+repository = "skyslope/experimental-mapping-tool"
+ref = "refs/heads/main"
+
+[sources.forms_android]
+repository = "skyslope/forms-android"
+ref = "refs/heads/master"
+
+[sources.forms_api]
+repository = "skyslope/forms-api"
+ref = "refs/heads/dev"
+
+[sources.forms_api_metadata]
+repository = "skyslope/forms-api-metadata"
+ref = "refs/heads/dev"
+
+[sources.forms_api_partner]
+repository = "skyslope/forms-api-partner"
+ref = "refs/heads/dev"
+
+[sources.forms_api_release_management]
+repository = "skyslope/forms-api-release-management"
+ref = "refs/heads/main"
+
+[sources.forms_aws]
+repository = "skyslope/forms-aws"
+ref = "refs/heads/master"
+
+[sources.forms_clauses]
+repository = "skyslope/forms-clauses"
+ref = "refs/heads/dev"
+
+[sources.forms_db]
+repository = "skyslope/forms-db"
+ref = "refs/heads/dev"
+
+[sources.forms_deployments]
+repository = "skyslope/forms-deployments"
+ref = "refs/heads/master"
+
+[sources.forms_dev_env]
+repository = "skyslope/forms-dev-env"
+ref = "refs/heads/develop"
+
+[sources.forms_event_processor]
+repository = "skyslope/forms-event-processor"
+ref = "refs/heads/dev"
+
+[sources.forms_functions]
+repository = "skyslope/forms-functions"
+ref = "refs/heads/main"
+
+[sources.forms_helm_charts]
+repository = "skyslope/forms-helm-charts"
+ref = "refs/heads/master"
+
+[sources.forms_postman]
+repository = "skyslope/forms-postman"
+ref = "refs/heads/master"
+
+[sources.forms_shared]
+repository = "skyslope/forms-shared"
+ref = "refs/heads/main"
+
+[sources.forms_test]
+repository = "skyslope/forms-test"
+ref = "refs/heads/develop"
+
+[sources.forms_ui]
+repository = "skyslope/forms-ui"
+ref = "refs/heads/dev"
+
+[sources.forms_user_service]
+repository = "skyslope/forms-user-service"
+ref = "refs/heads/dev"
+
+[sources.gar_proxy]
+repository = "skyslope/gar-proxy"
+ref = "refs/heads/master"
+
+[sources.leaderboard]
+repository = "skyslope/leaderboard"
+ref = "refs/heads/main"
+
+[sources.openfaas_forms_user_import]
+repository = "skyslope/openfaas-forms-user-import"
+ref = "refs/heads/dev"
+
+[sources.skydobe_api]
+repository = "skyslope/skydobe-api"
+ref = "refs/heads/main"
+
+[sources.skydobe_ui]
+repository = "skyslope/skydobe-ui"
+ref = "refs/heads/main"
+
+[sources.skyslope_forms_ios_certificates]
+repository = "skyslope/skyslope-forms-ios-certificates"
+ref = "refs/heads/master"
+
+[sources.skyslope_forms_widget_demo]
+repository = "skyslope/skyslope-forms-widget-demo"
+ref = "refs/heads/main"
+
+[sources.skyslope_widget]
+repository = "skyslope/skyslope-widget"
+ref = "refs/heads/master"
+
+[sources.skyslope_widget_demo]
+repository = "skyslope/skyslope-widget-demo"
+ref = "refs/heads/master"
+
+[sources.skyslope_widget_react]
+repository = "skyslope/skyslope-widget-react"
+ref = "refs/heads/master"
+
+[sources.terraform_skyslope_forms]
+repository = "skyslope/terraform-skyslope-forms"
+ref = "refs/heads/master"
+
+[sources.terraform_skyslope_forms_dev]
+repository = "skyslope/terraform-skyslope-forms-dev"
+ref = "refs/heads/master"
+
+[sources.terraform_skyslope_forms_staging]
+repository = "skyslope/terraform-skyslope-forms-staging"
+ref = "refs/heads/master"
