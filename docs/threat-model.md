@@ -167,3 +167,9 @@ Start with isolated tests using synthetic origins and mock frames: URL construct
 - Source-derived in-memory checks used the real controller and extracted URL-construction methods with mocked globals and synthetic `.invalid` origins. They confirmed parameter encoding/tracking, configured-origin preservation for an absolute-looking path, duplicate callback rejection, configuration loss on reset, and browser-origin scheme semantics. An initial harness-only syntax mistake was corrected before the successful run; no repository source was edited for testing.
 - `node --check` passed for `release.config.js` and `deployment/getPackageVersion.js`. Package, lockfile, TypeScript configuration, and ESLint JSON parsed successfully.
 - These are narrow source/contract checks, not a Stencil component build or real cross-origin browser test. Full spec/E2E tests, dependency installation, remote header checks, package publishing, and live integrations were not run.
+
+## Self-hosted CI
+
+Linux workflow jobs use the `skyslope-ops` ARM64 pool. Repository code and
+dependencies execute with the pool's network reachability and Docker access.
+Runner isolation and cleanup depend on the pool configuration.
