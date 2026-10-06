@@ -328,7 +328,8 @@ export class SsContainerInline {
     const generation = this.clearGeneration;
     if (this.tokenMode) await this.resolveToken();
     if (generation !== this.clearGeneration) return;
-    this.iframe().src = this.getUrl();
+    const iframe = this.iframe();
+    if (iframe != null) iframe.src = this.getUrl();
   };
 
   // Renew the session in place. Exposed to the host as widget.refreshToken() for the case

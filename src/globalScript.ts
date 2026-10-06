@@ -115,7 +115,7 @@ export class SkySlopeWidget {
 
   registerClearToken = (clearTokenCallback: () => Promise<void>) => {
     if (this._clearTokenCallback) {
-      throw new Error('Clear token Callback is already defined. Is more than one inline container running?');
+      throw new Error('Clear Token Callback is already defined. Is more than one inline container running?');
     }
     this._clearTokenCallback = clearTokenCallback;
   };

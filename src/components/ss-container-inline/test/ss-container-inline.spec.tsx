@@ -214,6 +214,12 @@ describe('ss-container-inline reload', () => {
     delete (window as any).skyslope;
   });
 
+  it('does nothing if the host navigates before the iframe has rendered', async () => {
+    const { component } = makeComponent(null);
+    component.iframe = () => null;
+    await expect(component.navigateTo()).resolves.toBeUndefined();
+  });
+
   it('does nothing if the host calls reload() before the iframe has rendered', () => {
     const { component } = makeComponent(null);
     component.iframe = () => null;
@@ -269,6 +275,20 @@ describe('ss-container-inline message handling / origin trust', () => {
 // The renewal timer lives in the host page, which is why it survives Forms navigating away.
 // These tests assert the SCHEDULE rather than advancing wall-clock time: what matters is when
 // we decide to ask for the next token, and that a bad answer never re-arms a tight loop.
+describe('ss-container-inline token expiry decoding', () => {
+  // Real JWTs are base64url with the padding stripped. atob uses forgiving base64, which accepts
+  // a missing pad, so only the url-safe characters need mapping. Cover every valid pad length.
+  it.each([0, 1, 2])('reads exp from an unpadded base64url payload (%i pad chars stripped)', (extra) => {
+    const component = new SsContainerInline() as any;
+    for (let filler = 0; filler < 6; filler++) {
+      const claims = { exp: 1900000000, sub: '?>'.repeat(filler + extra) };
+      const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+      expect(payload).not.toContain('=');
+      expect(component.decodeExpiry(`header.${payload}.sig`)).toBe(1900000000 * 1000);
+    }
+  });
+});
+
 describe('ss-container-inline renewal scheduling', () => {
   // resolveToken also arms a timer (the getToken deadline), so a flat list of delays cannot
   // tell us which one is the renewal. Hand out an id per call and look up the one the
