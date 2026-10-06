@@ -209,6 +209,26 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
   });
 });
 
+describe('ss-container-inline reload', () => {
+  afterEach(() => {
+    delete (window as any).skyslope;
+  });
+
+  it('does nothing if the host calls reload() before the iframe has rendered', () => {
+    const { component } = makeComponent(null);
+    component.iframe = () => null;
+    expect(() => component.reloadIframe()).not.toThrow();
+  });
+
+  it('posts reload to the Forms origin', () => {
+    const { component } = makeComponent(null);
+    const postMessage = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage } });
+    component.reloadIframe();
+    expect(postMessage).toHaveBeenCalledWith('reload', 'http://localhost:3001');
+  });
+});
+
 describe('ss-container-inline message handling / origin trust', () => {
   afterEach(() => {
     delete (window as any).skyslope;

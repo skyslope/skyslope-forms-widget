@@ -318,7 +318,7 @@ export class SsContainerInline {
   private formsOrigin = (): string => new URL(Env.formsUrl).origin;
 
   private reloadIframe = () => {
-    this.iframe().contentWindow.postMessage('reload', this.formsOrigin());
+    this.iframe()?.contentWindow?.postMessage('reload', this.formsOrigin());
   };
 
   private navigateTo = async () => {
