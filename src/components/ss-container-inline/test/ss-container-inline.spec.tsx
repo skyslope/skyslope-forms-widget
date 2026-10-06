@@ -489,6 +489,115 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(emitted).toEqual([]);
   });
 
+  // A getToken the test settles by hand, to hold a token fetch open across a clearToken().
+  function deferredGetToken() {
+    let settle: (token: string | null) => void = () => {};
+    const getToken = jest.fn(() => new Promise<string | null>((resolve) => (settle = resolve)));
+    return { getToken, settle: (token: string | null) => settle(token) };
+  }
+
+  async function clearWithAck(component: any) {
+    const clearing = component.clearToken();
+    tokenCleared(component);
+    await clearing;
+  }
+
+  it('drops a renewal whose getToken was still running when the host signed out', async () => {
+    const { component, iframeEl, postMessage } = await onTokenPath();
+    const pending = deferredGetToken();
+    stubWidget(pending.getToken);
+
+    const renewing = component.renewNow(true);
+    await clearWithAck(component);
+    postMessage.mockClear();
+    pending.settle(jwtExpiringIn(3600, 'previous-user'));
+    await renewing;
+
+    expect(postMessage).not.toHaveBeenCalled(); // no set-token after the sign-out
+    expect(component.token).toBeNull();
+    expect(component.renewalTimer).toBeNull();
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+
+  it('drops a fallback reload whose getToken was still running when the host signed out', async () => {
+    const pending = deferredGetToken();
+    const { component, emitted, iframeEl } = makeComponent(pending.getToken);
+    const postMessage = jest.fn();
+    (iframeEl as any).contentWindow = { postMessage };
+
+    const falling = component.handleAuthFailed();
+    await clearWithAck(component);
+    pending.settle(jwtExpiringIn(3600, 'previous-user'));
+    await falling;
+
+    expect(iframeEl.src).not.toContain('#t=');
+    expect(component.token).toBeNull();
+    expect(emitted).toEqual([]); // the host signed out on purpose: no auth error for it
+  });
+
+  it('raises no auth error when a getToken that was running fails after the sign-out', async () => {
+    let fail: (error: Error) => void = () => {};
+    const getToken = () => new Promise<string | null>((_resolve, reject) => (fail = reject));
+    const { component, emitted, iframeEl } = makeComponent(getToken);
+    (iframeEl as any).contentWindow = { postMessage: jest.fn() };
+
+    const falling = component.handleAuthFailed();
+    await clearWithAck(component);
+    fail(new Error('host session ended'));
+    await falling;
+
+    expect(emitted).toEqual([]);
+  });
+
+  it('does not reload again for a navigation whose getToken was still running at the sign-out', async () => {
+    const { component, iframeEl } = await onTokenPath();
+    const pending = deferredGetToken();
+    stubWidget(pending.getToken);
+    let loads = 0;
+    let src = iframeEl.src;
+    Object.defineProperty(iframeEl, 'src', {
+      get: () => src,
+      set: (value: string) => {
+        loads += 1;
+        src = value;
+      },
+    });
+
+    const navigating = component.navigateTo();
+    await clearWithAck(component);
+    expect(loads).toBe(1); // clearToken's own reload
+    pending.settle(jwtExpiringIn(3600, 'previous-user'));
+    await navigating;
+
+    expect(loads).toBe(1);
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+
+  it('ignores a token-installed that arrives after the clear', async () => {
+    const { component } = await onTokenPath();
+    await clearWithAck(component);
+
+    component.handleMessage({
+      origin: formsOrigin(),
+      data: { status: 'token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 },
+    } as MessageEvent);
+
+    expect(component.renewalTimer).toBeNull();
+  });
+
+  it('tries the fallback again after a getToken that returned nothing', async () => {
+    let next: string | null = null;
+    const { component, emitted, iframeEl } = makeComponent(() => next);
+
+    await component.handleAuthFailed(); // host had no token yet
+    expect(emitted.map((e) => e.reason)).toEqual(['iframe-auth-failed']);
+    expect(component.tokenMode).toBe(false);
+
+    next = jwtExpiringIn(3600);
+    await component.handleAuthFailed(); // the next wall, after a reload
+    expect(iframeEl.src).toContain('#t=');
+  });
+
   it('is a no-op for the global API until an inline container registers', async () => {
     const widget = new SkySlopeWidget();
     await expect(widget.clearToken()).resolves.toBeUndefined();

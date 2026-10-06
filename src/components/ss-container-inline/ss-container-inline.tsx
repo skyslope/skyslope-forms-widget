@@ -99,6 +99,10 @@ export class SsContainerInline {
   // Resolves the wait in clearToken() when Forms confirms the clear. Null when no clear is waiting.
   private clearAck: (() => void) | null = null;
 
+  // Bumped by clearToken(). Token work that awaits the host records it first and stops if it
+  // changed, so a token fetched before the sign-out is never sent after it.
+  private clearGeneration = 0;
+
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
   private decodeExpiry(jwt: string | null): number | null {
@@ -160,9 +164,13 @@ export class SsContainerInline {
   private async resolveToken(): Promise<void> {
     const getToken = readGetToken();
     if (getToken == null) return;
+    const generation = this.clearGeneration;
     try {
-      this.token = await this.withTimeout(Promise.resolve(getToken()));
+      const token = await this.withTimeout(Promise.resolve(getToken()));
+      if (generation !== this.clearGeneration) return;
+      this.token = token;
     } catch (error) {
+      if (generation !== this.clearGeneration) return;
       this.token = null;
       this.authError.emit({ reason: 'token-callback-failed', error });
     }
@@ -178,7 +186,9 @@ export class SsContainerInline {
     if (readGetToken() == null) return;
 
     const previousExpiry = this.expiresAt;
+    const generation = this.clearGeneration;
     await this.resolveToken();
+    if (generation !== this.clearGeneration) return;
     if (this.token == null) {
       this.handleRenewalFailure();
       return;
@@ -218,6 +228,8 @@ export class SsContainerInline {
   }
 
   private handleTokenInstalled(data: { ok?: boolean; exp?: number }): void {
+    // A late answer after clearToken() must not restart renewal.
+    if (!this.tokenMode) return;
     if (data.ok === false) {
       this.handleRenewalFailure();
       return;
@@ -304,7 +316,9 @@ export class SsContainerInline {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
     // leaves the token null, so navigation never introduces a token.
+    const generation = this.clearGeneration;
     if (this.tokenMode) await this.resolveToken();
+    if (generation !== this.clearGeneration) return;
     this.iframe().src = this.getUrl();
   };
 
@@ -319,6 +333,7 @@ export class SsContainerInline {
   // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
   // otherwise outlast the host's own sign-out.
   private clearToken = async (): Promise<void> => {
+    this.clearGeneration += 1;
     // Stop renewing and forget the token first, so nothing sends it again.
     this.clearRenewalTimer();
     this.token = null;
@@ -388,8 +403,12 @@ export class SsContainerInline {
       return;
     }
     this.tokenMode = true;
+    const generation = this.clearGeneration;
     await this.resolveToken();
+    if (generation !== this.clearGeneration) return;
     if (this.token == null) {
+      // No token was injected, so a later wall (after a reload) may try again.
+      this.tokenMode = false;
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }

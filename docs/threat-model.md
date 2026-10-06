@@ -159,7 +159,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 **Path and impact:** On the token path a bearer token from the host's `getToken` is placed in the iframe `src` fragment for the reload and later posted to the frame for renewal. Fragments are not sent to servers, but the full `src` is readable by any script in the host origin, including session-replay or monitoring tools that record element attributes, until Forms loads and strips it. Forms keeps the resulting session in its tab's `sessionStorage`, so it survives a host sign-out or page reload in the same tab unless the host calls `clearToken()` while the widget is mounted.
 
-**Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are origin-checked; `clearToken()` posts `clear-token`, waits up to 3 seconds for `token-cleared`, then reloads the frame without a token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
+**Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are origin-checked; `clearToken()` posts `clear-token`, waits up to 3 seconds for `token-cleared`, then reloads the frame without a token, and token work still waiting on `getToken` when it is called stops instead of sending the earlier token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
 
 **Mitigation:** Integrators should exclude the widget iframe from session replay and call `clearToken()` on sign-out and user switch. Prefer short-lived, audience-limited tokens.
 
