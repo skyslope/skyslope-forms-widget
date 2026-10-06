@@ -42,9 +42,11 @@ export interface SkyslopeConfig {
    * When provided, the widget passes the token to the embedded Forms app in the
    * iframe URL fragment so it can authenticate without third-party cookies. This
    * is what lets the widget work in Safari (and other cookie-blocking browsers).
-   * May be sync or async. Return null to fall back to the normal cookie-based login.
+   * Called only after the Forms app reports that its cookie sign-in failed. May be sync or
+   * async. Returning null (no token available) raises authError on the container. Passing null
+   * here is the same as leaving getToken out.
    */
-  getToken?: () => string | null | Promise<string | null>;
+  getToken?: (() => string | null | Promise<string | null>) | null;
 }
 
 declare global {

@@ -103,6 +103,9 @@ export class SsContainerInline {
   // changed, so a token fetched before the sign-out is never sent after it.
   private clearGeneration = 0;
 
+  // The clear in progress, so a second clearToken() call joins it instead of starting another.
+  private clearing: Promise<void> | null = null;
+
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
   private decodeExpiry(jwt: string | null): number | null {
@@ -332,7 +335,14 @@ export class SsContainerInline {
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
   // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
   // otherwise outlast the host's own sign-out.
-  private clearToken = async (): Promise<void> => {
+  private clearToken = (): Promise<void> => {
+    this.clearing ??= this.runClear().finally(() => {
+      this.clearing = null;
+    });
+    return this.clearing;
+  };
+
+  private runClear = async (): Promise<void> => {
     this.clearGeneration += 1;
     // Stop renewing and forget the token first, so nothing sends it again.
     this.clearRenewalTimer();
@@ -370,8 +380,11 @@ export class SsContainerInline {
   }
 
   private handleMessage = (event: MessageEvent) => {
-    // Only trust messages from the Forms origin we framed.
+    // Only trust messages from the Forms origin we framed, and from our own frame: another window
+    // on the same origin (a second Forms tab, say) must not drive this widget's auth state.
     if (event.origin !== new URL(Env.formsUrl).origin) return;
+    const frameWindow = this.iframe()?.contentWindow;
+    if (frameWindow != null && event.source !== frameWindow) return;
     let data: { status?: string; ok?: boolean; exp?: number };
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;

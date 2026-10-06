@@ -41,7 +41,7 @@ flowchart LR
     HOST -->|reload with configured target origin| FRAME
     CFG -->|getToken callback, module scope| HOST
     HOST -->|"#t= token fragment; set-token and clear-token to the Forms origin"| FRAME
-    FRAME -->|"forms-auth-failed, token-installed, token-cleared (origin-checked)"| HOST
+    FRAME -->|"forms-auth-failed, token-installed, token-cleared (origin and frame checked)"| HOST
     FRAME -->|Documented status and identifier messages| LISTEN
     FRAME -->|Authentication and application workflows| REMOTE[Forms APIs and identity provider]
     FRAME -->|Workflow navigation, externally implemented| SIGN[DigiSign application]
@@ -61,7 +61,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 - Production, staging, and integration URLs are fixed HTTPS values in `environment.ts`; ordinary runtime initialization cannot select an arbitrary iframe base. The development URL is HTTP localhost.
 - `URLSearchParams` encodes added query values. With the checked-in trailing-slash base, an absolute-looking supplied path remains a path under that base; a local check confirmed this behavior. No direct arbitrary-origin navigation or script-URL execution is established by simple `navigateTo` input.
-- `reloadIframe`, `set-token` and `clear-token` use the exact Forms origin rather than wildcard `*`; `reload` and `clear-token` carry no document data or token. The container's own listener accepts only messages whose `event.origin` is the Forms origin and ignores malformed payloads; it does not bind `event.source` to its iframe. This protects outbound delivery but does not verify messages received by an integrator. If the frame has navigated to a different origin, reload delivery requires a separately verified protocol decision.
+- `reloadIframe`, `set-token` and `clear-token` use the exact Forms origin rather than wildcard `*`; `reload` and `clear-token` carry no document data or token. The container's own listener accepts only messages whose `event.origin` is the Forms origin and whose `event.source` is its own iframe window, and ignores malformed payloads. This protects outbound delivery but does not verify messages received by an integrator. If the frame has navigated to a different origin, reload delivery requires a separately verified protocol decision.
 - A cross-origin iframe preserves browser same-origin isolation. Shadow DOM provides component/style encapsulation, not a security boundary against the parent page's scripts. The iframe has no sandbox or explicit referrer policy and allows fullscreen.
 - The README explicitly requires integrators to obtain framing approval and configure company SSO. The actual server-side frame allowlist, authentication policy, and object authorization are not in this repository.
 - Duplicate navigation/reload callback registration throws rather than silently replacing an existing callback. This detects unsupported multiple-container use but does not provide robust instance ownership or lifecycle recovery.
@@ -159,7 +159,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 **Path and impact:** On the token path a bearer token from the host's `getToken` is placed in the iframe `src` fragment for the reload and later posted to the frame for renewal. Fragments are not sent to servers, but the full `src` is readable by any script in the host origin, including session-replay or monitoring tools that record element attributes, until Forms loads and strips it. Forms keeps the resulting session in its tab's `sessionStorage`, so it survives a host sign-out or page reload in the same tab unless the host calls `clearToken()` while the widget is mounted.
 
-**Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are origin-checked; `clearToken()` posts `clear-token`, waits up to 3 seconds for `token-cleared`, then reloads the frame without a token, and token work still waiting on `getToken` when it is called stops instead of sending the earlier token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
+**Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are checked for the Forms origin and the widget's own frame; `clearToken()` posts `clear-token`, waits up to 3 seconds for `token-cleared`, then reloads the frame without a token, and token work still waiting on `getToken` when it is called stops instead of sending the earlier token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
 
 **Mitigation:** Integrators should exclude the widget iframe from session replay and call `clearToken()` on sign-out and user switch. Prefer short-lived, audience-limited tokens.
 

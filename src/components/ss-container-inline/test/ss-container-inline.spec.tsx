@@ -431,8 +431,8 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     return { component, emitted, iframeEl, postMessage };
   }
 
-  const tokenCleared = (component: any, origin = formsOrigin()) =>
-    component.handleMessage({ origin, data: { status: 'token-cleared' } } as MessageEvent);
+  const tokenCleared = (component: any, origin = formsOrigin(), source = component.iframe()?.contentWindow) =>
+    component.handleMessage({ origin, source, data: { status: 'token-cleared' } } as MessageEvent);
 
   it('posts clear-token to the exact Forms origin, then reloads the frame without a token once Forms confirms', async () => {
     const { component, iframeEl, postMessage } = await onTokenPath();
@@ -579,6 +579,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
 
     component.handleMessage({
       origin: formsOrigin(),
+      source: component.iframe()?.contentWindow,
       data: { status: 'token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 },
     } as MessageEvent);
 
@@ -596,6 +597,32 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     next = jwtExpiringIn(3600);
     await component.handleAuthFailed(); // the next wall, after a reload
     expect(iframeEl.src).toContain('#t=');
+  });
+
+  it('ignores a token-cleared from another window on the Forms origin', async () => {
+    const { component, iframeEl } = await onTokenPath();
+
+    const clearing = component.clearToken();
+    tokenCleared(component, formsOrigin(), { postMessage: jest.fn() }); // e.g. a second Forms tab
+    await Promise.resolve();
+    expect(iframeEl.src).toContain('#t='); // still waiting on our own frame
+
+    tokenCleared(component);
+    await clearing;
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+
+  it('joins a clear already in progress instead of starting a second one', async () => {
+    const { component, postMessage } = await onTokenPath();
+
+    const first = component.clearToken();
+    const second = component.clearToken();
+    expect(second).toBe(first);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+
+    tokenCleared(component);
+    await Promise.all([first, second]);
+    expect(pendingTimers.filter((t) => t.ms === 3000)).toHaveLength(1);
   });
 
   it('is a no-op for the global API until an inline container registers', async () => {
