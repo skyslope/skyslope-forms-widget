@@ -230,7 +230,7 @@ export class SsContainerInline {
   // Always targeted at the exact Forms origin. A '*' target would hand the token to whatever
   // happened to be listening.
   private postTokenToForms(token: string): void {
-    this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token }, new URL(Env.formsUrl).origin);
+    this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token }, this.formsOrigin());
   }
 
   private handleTokenInstalled(data: { ok?: boolean; exp?: number }): void {
@@ -314,8 +314,11 @@ export class SsContainerInline {
 
   private iframe = () => this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement;
 
+  // The only origin we send to or accept messages from.
+  private formsOrigin = (): string => new URL(Env.formsUrl).origin;
+
   private reloadIframe = () => {
-    this.iframe().contentWindow.postMessage('reload', Env.formsUrl);
+    this.iframe().contentWindow.postMessage('reload', this.formsOrigin());
   };
 
   private navigateTo = async () => {
@@ -378,14 +381,14 @@ export class SsContainerInline {
         done();
         return;
       }
-      target.postMessage({ status: FORMS_CLEAR_TOKEN }, new URL(Env.formsUrl).origin);
+      target.postMessage({ status: FORMS_CLEAR_TOKEN }, this.formsOrigin());
     });
   }
 
   private handleMessage = (event: MessageEvent) => {
     // Only trust messages from the Forms origin we framed, and from our own frame: another window
     // on the same origin (a second Forms tab, say) must not drive this widget's auth state.
-    if (event.origin !== new URL(Env.formsUrl).origin) return;
+    if (event.origin !== this.formsOrigin()) return;
     const frameWindow = this.iframe()?.contentWindow;
     if (frameWindow != null && event.source !== frameWindow) return;
     let data: { status?: string; ok?: boolean; exp?: number };
