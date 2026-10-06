@@ -147,8 +147,10 @@ async function signOut() {
 If authentication cannot be established or kept — `getToken` throws or returns nothing, the
 embedded Forms app reports its own auth failure from inside the iframe, or a renewal fails twice
 before the token runs out — the widget emits an `authError` event
-on the container element (`ss-container-inline` / `ss-container-modal`) so the host page can
-react (for example, by re-authenticating the user) instead of the iframe silently failing:
+on the container element so the host page can react (for example, by re-authenticating the user)
+instead of the iframe silently failing. The event is fired by `ss-container-inline` and bubbles out
+of `ss-container-modal`, so `addEventListener` works on either element; in typed JSX, `onAuthError`
+is declared on `ss-container-inline`:
 
 ```javascript
 document.querySelector('ss-container-modal')

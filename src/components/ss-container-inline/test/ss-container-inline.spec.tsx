@@ -746,6 +746,17 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(pendingTimers.filter((t) => t.ms === 3000)).toHaveLength(1);
   });
 
+  it('skips the reload if the widget is unmounted while waiting for Forms', async () => {
+    const { component, iframeEl } = await onTokenPath();
+
+    const clearing = component.clearToken();
+    component.disconnectedCallback();
+    tokenCleared(component);
+    await clearing;
+
+    expect(iframeEl.src).toContain('#t='); // the old src, untouched
+  });
+
   it('is a no-op for the global API until an inline container registers', async () => {
     const widget = new SkySlopeWidget();
     await expect(widget.clearToken()).resolves.toBeUndefined();

@@ -317,7 +317,7 @@ export class SsContainerInline {
     return this.token != null ? `${url}#t=${encodeURIComponent(this.token)}` : url;
   }
 
-  private iframe = () => this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement;
+  private iframe = () => this.el.shadowRoot?.getElementById('ss-container-iframe') as HTMLIFrameElement | null;
 
   // The only origin we send to or accept messages from.
   private formsOrigin = (): string => new URL(Env.formsUrl).origin;
@@ -355,7 +355,7 @@ export class SsContainerInline {
   };
 
   private runClear = async (): Promise<void> => {
-    this.clearGeneration += 1;
+    const generation = ++this.clearGeneration;
     // Stop renewing and forget the token first, so nothing sends it again.
     this.clearRenewalTimer();
     this.token = null;
@@ -367,6 +367,8 @@ export class SsContainerInline {
     this.tokenMode = false;
 
     await this.askFormsToClear();
+    // Unmounted while waiting: there is no frame left to reload.
+    if (generation !== this.clearGeneration) return;
     // Reload without a token. Anything still running in the old page goes away with it.
     const iframe = this.iframe();
     if (iframe != null) iframe.src = this.getUrl();
