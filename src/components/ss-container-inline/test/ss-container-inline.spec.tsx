@@ -474,6 +474,40 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
   });
 
+  it('accepts a renewal whose host token outlives the last one sent, even if the session runs longer', async () => {
+    // After an exchange the session's token can outlive the host's. The staleness check compares
+    // host tokens with each other, so a fresh host token is not mistaken for a stale one.
+    let next = jwtExpiringIn(3600, 'first');
+    const { component } = makeComponent(() => next);
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    component.handleTokenInstalled({ ok: true, exp: Math.floor(Date.now() / 1000) + 7200 });
+    postMessage.mockClear();
+
+    next = jwtExpiringIn(3700, 'second'); // later than the last host token, earlier than the session
+    await component.renewNow();
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0].status).toBe('set-token');
+  });
+
+  it('stops a renewal that was waiting on getToken when the container went away', async () => {
+    let settle: (token: string) => void = () => {};
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    stubWidget(() => new Promise<string>((resolve) => (settle = resolve)));
+    postMessage.mockClear();
+
+    const renewing = component.renewNow(true);
+    component.disconnectedCallback();
+    settle(jwtExpiringIn(7200));
+    await renewing;
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(component.renewalTimer).toBeNull();
+  });
+
   it('clears a pending renewal when the container goes away', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);

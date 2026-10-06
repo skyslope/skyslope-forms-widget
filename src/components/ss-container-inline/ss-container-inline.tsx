@@ -96,11 +96,15 @@ export class SsContainerInline {
   // from one renewal to the next.
   private lastReportedExpiry: number | null = null;
 
+  // The expiry of the last host token we sent. A new host token is checked against this, not
+  // against the session's expiry, which after an exchange can differ from any host token.
+  private lastSentExpiry: number | null = null;
+
   // Resolves the wait in clearToken() when Forms confirms the clear. Null when no clear is waiting.
   private clearAck: (() => void) | null = null;
 
-  // Bumped by clearToken(). Token work that awaits the host records it first and stops if it
-  // changed, so a token fetched before the sign-out is never sent after it.
+  // Bumped by clearToken() and on unmount. Token work that awaits the host records it first and
+  // stops if it changed, so a token fetched before a sign-out or teardown is never used after it.
   private clearGeneration = 0;
 
   // The clear in progress, so a second clearToken() call joins it instead of starting another.
@@ -191,7 +195,7 @@ export class SsContainerInline {
     // sessionless session, and browsers whose cookies work must never receive a token.
     if (!this.tokenMode) return;
 
-    const previousExpiry = this.expiresAt;
+    const previousExpiry = this.lastSentExpiry;
     const generation = this.clearGeneration;
     await this.resolveToken();
     if (generation !== this.clearGeneration) return;
@@ -208,6 +212,7 @@ export class SsContainerInline {
     }
 
     this.postTokenToForms(this.token);
+    this.lastSentExpiry = nextExpiry;
     // Arm on what we can see for now. Forms answers with the expiry of the token the session
     // actually ended up using — after an exchange that can differ — and we re-arm on that.
     this.scheduleRenewal(nextExpiry);
@@ -356,6 +361,7 @@ export class SsContainerInline {
     this.token = null;
     this.expiresAt = null;
     this.lastReportedExpiry = null;
+    this.lastSentExpiry = null;
     this.renewalRetryUsed = false;
     // Leave token mode so the next cookie wall can start the token path again, for the next user.
     this.tokenMode = false;
@@ -433,8 +439,9 @@ export class SsContainerInline {
       return;
     }
     this.iframe().src = this.getUrl();
+    this.lastSentExpiry = this.decodeExpiry(this.token);
     // From here the session lives on a token with a finite life, so start watching it.
-    this.scheduleRenewal(this.decodeExpiry(this.token));
+    this.scheduleRenewal(this.lastSentExpiry);
   };
 
   connectedCallback() {
@@ -448,6 +455,7 @@ export class SsContainerInline {
   }
 
   disconnectedCallback() {
+    this.clearGeneration += 1;
     window.removeEventListener('message', this.handleMessage);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.clearRenewalTimer();
