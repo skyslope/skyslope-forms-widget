@@ -391,7 +391,7 @@ export class SsContainerInline {
     // on the same origin (a second Forms tab, say) must not drive this widget's auth state.
     if (event.origin !== this.formsOrigin()) return;
     const frameWindow = this.iframe()?.contentWindow;
-    if (frameWindow != null && event.source !== frameWindow) return;
+    if (frameWindow == null || event.source !== frameWindow) return;
     let data: { status?: string; ok?: boolean; exp?: number };
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;

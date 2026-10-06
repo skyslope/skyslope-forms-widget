@@ -240,12 +240,35 @@ describe('ss-container-inline message handling / origin trust', () => {
     delete (window as any).skyslope;
   });
 
-  function messageEvent(origin: string, data: unknown): MessageEvent {
-    return { origin, data } as MessageEvent;
+  // The Forms frame window the component posts to and accepts messages from.
+  const frameWindow = { postMessage: jest.fn() };
+
+  function withFrame(component: any) {
+    component.iframe = () => ({ src: '', contentWindow: frameWindow });
+    return component;
   }
+
+  function messageEvent(origin: string, data: unknown, source: unknown = frameWindow): MessageEvent {
+    return { origin, data, source } as MessageEvent;
+  }
+
+  it('ignores messages before the iframe exists, even from the Forms origin', () => {
+    const { component, emitted } = makeComponent(null);
+    component.iframe = () => null;
+    component.handleMessage(messageEvent('http://localhost:3001', { status: 'forms-auth-failed' }));
+    expect(emitted).toEqual([]);
+  });
+
+  it('ignores messages from another window on the Forms origin', () => {
+    const { component, emitted } = makeComponent(null);
+    withFrame(component);
+    component.handleMessage(messageEvent('http://localhost:3001', { status: 'forms-auth-failed' }, { postMessage: jest.fn() }));
+    expect(emitted).toEqual([]);
+  });
 
   it('routes a forms-auth-failed message from the Forms origin to the auth-failed handler (no getToken -> authError)', () => {
     const { component, emitted } = makeComponent(null);
+    withFrame(component);
     // Env.formsUrl in spec is http://localhost:3001/. With no getToken the handler emits
     // synchronously (no await before the emit), so this asserts without awaiting.
     component.handleMessage(messageEvent('http://localhost:3001', JSON.stringify({ status: 'forms-auth-failed' })));
@@ -254,18 +277,21 @@ describe('ss-container-inline message handling / origin trust', () => {
 
   it('accepts an already-parsed message object', () => {
     const { component, emitted } = makeComponent(null);
+    withFrame(component);
     component.handleMessage(messageEvent('http://localhost:3001', { status: 'forms-auth-failed' }));
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
   });
 
   it('ignores messages from a different origin', () => {
     const { component, emitted } = makeComponent(() => 'jwt');
+    withFrame(component);
     component.handleMessage(messageEvent('https://evil.example.com', JSON.stringify({ status: 'forms-auth-failed' })));
     expect(emitted).toEqual([]);
   });
 
   it('ignores unrelated and malformed payloads from the Forms origin', () => {
     const { component, emitted } = makeComponent(null);
+    withFrame(component);
     component.handleMessage(messageEvent('http://localhost:3001', JSON.stringify({ status: 'forms-user-ready' })));
     component.handleMessage(messageEvent('http://localhost:3001', 'not-json{'));
     expect(emitted).toEqual([]);
