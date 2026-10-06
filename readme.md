@@ -129,6 +129,21 @@ Forms origin, so the token stays out of the iframe URL). This requires a Forms v
 accepts the token handoff; on older versions it is a safe no-op and the token still refreshes
 on navigation.
 
+When your user signs out or you switch to a different user, call
+`await window.skyslope.widget.clearToken()` while the widget is still mounted. The Forms app keeps
+the session it built from your token in its own tab storage, so without this it can outlast your
+sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal,
+asks the Forms app to drop that session, and reloads the iframe without a token; it resolves once
+the reload has started. If the Forms version in use does not confirm within 3 seconds, the widget
+reloads anyway. The next user then goes through the same fallback with a fresh `getToken` call.
+
+```javascript
+async function signOut() {
+  await window.skyslope.widget.clearToken();
+  await myApp.signOut();
+}
+```
+
 If authentication cannot be established — `getToken` throws, or the embedded Forms app
 reports its own auth failure from inside the iframe — the widget emits an `authError` event
 on the container element (`ss-container-inline` / `ss-container-modal`) so the host page can

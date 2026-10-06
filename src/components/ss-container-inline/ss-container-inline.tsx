@@ -14,6 +14,17 @@ const FORMS_SET_TOKEN = 'set-token';
 // expiry of the token the SESSION ended up with, which is what we re-arm the timer on.
 const FORMS_TOKEN_INSTALLED = 'token-installed';
 
+// Sent by the widget TO the Forms app when the host signs the user out or switches users, so
+// Forms drops the session it built from our tokens. Paired with a files-ui listener.
+const FORMS_CLEAR_TOKEN = 'clear-token';
+
+// Sent back by the Forms app once it has dropped that session.
+const FORMS_TOKEN_CLEARED = 'token-cleared';
+
+// How long clearToken() waits for Forms to confirm before reloading the frame anyway. An older
+// Forms never answers, and the host should not wait long on its own sign-out.
+const CLEAR_ACK_TIMEOUT_MS = 3 * 1000;
+
 // Ask the host for a fresh token this long before the current one expires.
 //
 // This has to land inside a specific window, and renewing EARLIER is not safer — it is useless.
@@ -84,6 +95,9 @@ export class SsContainerInline {
   // the expiry of a token we sent — those two can legitimately differ, so only this is comparable
   // from one renewal to the next.
   private lastReportedExpiry: number | null = null;
+
+  // Resolves the wait in clearToken() when Forms confirms the clear. Null when no clear is waiting.
+  private clearAck: (() => void) | null = null;
 
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
@@ -301,6 +315,45 @@ export class SsContainerInline {
     await this.renewNow(true);
   };
 
+  // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
+  // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
+  // otherwise outlast the host's own sign-out.
+  private clearToken = async (): Promise<void> => {
+    // Stop renewing and forget the token first, so nothing sends it again.
+    this.clearRenewalTimer();
+    this.token = null;
+    this.expiresAt = null;
+    this.lastReportedExpiry = null;
+    this.renewalRetryUsed = false;
+    // Leave token mode so the next cookie wall can start the token path again, for the next user.
+    this.tokenMode = false;
+
+    await this.askFormsToClear();
+    // Reload without a token. Anything still running in the old page goes away with it.
+    const iframe = this.iframe();
+    if (iframe != null) iframe.src = this.getUrl();
+  };
+
+  // Post clear-token to the exact Forms origin and wait for token-cleared, or give up after a
+  // short timeout. Never rejects.
+  private askFormsToClear(): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        clearTimeout(timer);
+        this.clearAck = null;
+        resolve();
+      };
+      const timer = setTimeout(done, CLEAR_ACK_TIMEOUT_MS);
+      this.clearAck = done;
+      const target = this.iframe()?.contentWindow;
+      if (target == null) {
+        done();
+        return;
+      }
+      target.postMessage({ status: FORMS_CLEAR_TOKEN }, new URL(Env.formsUrl).origin);
+    });
+  }
+
   private handleMessage = (event: MessageEvent) => {
     // Only trust messages from the Forms origin we framed.
     if (event.origin !== new URL(Env.formsUrl).origin) return;
@@ -316,6 +369,10 @@ export class SsContainerInline {
     }
     if (data?.status === FORMS_TOKEN_INSTALLED) {
       this.handleTokenInstalled(data);
+      return;
+    }
+    if (data?.status === FORMS_TOKEN_CLEARED) {
+      this.clearAck?.();
     }
   };
 
@@ -346,6 +403,7 @@ export class SsContainerInline {
     widget?.registerReload(this.reloadIframe);
     widget?.registerNavigateTo(this.navigateTo);
     widget?.registerRefresh(this.refreshToken);
+    widget?.registerClearToken(this.clearToken);
     window.addEventListener('message', this.handleMessage);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }

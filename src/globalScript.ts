@@ -24,6 +24,7 @@ export class SkySlopeWidget {
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
   private _refreshCallback: () => void;
+  private _clearTokenCallback: () => Promise<void>;
 
   constructor() {
     this._path = '';
@@ -78,6 +79,12 @@ export class SkySlopeWidget {
   refreshToken = () => {
     this._refreshCallback?.();
   };
+  // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
+  // switches users. Resolves once the frame has been reloaded without a token. A no-op until an
+  // inline container is mounted.
+  clearToken = async (): Promise<void> => {
+    await this._clearTokenCallback?.();
+  };
   navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
   navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
@@ -104,6 +111,13 @@ export class SkySlopeWidget {
       throw new Error('Refresh Callback is already defined. Is more than one inline container running?');
     }
     this._refreshCallback = refreshCallback;
+  };
+
+  registerClearToken = (clearTokenCallback: () => Promise<void>) => {
+    if (this._clearTokenCallback) {
+      throw new Error('Clear token Callback is already defined. Is more than one inline container running?');
+    }
+    this._clearTokenCallback = clearTokenCallback;
   };
 
   get openInline(): boolean {

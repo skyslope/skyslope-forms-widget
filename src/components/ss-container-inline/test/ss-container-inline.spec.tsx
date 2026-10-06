@@ -398,3 +398,107 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewalTimer).toBeNull();
   });
 });
+
+describe('ss-container-inline clearToken (host sign-out or user switch)', () => {
+  const formsOrigin = () => new URL(Env.formsUrl).origin;
+  let realSetTimeout: typeof setTimeout;
+  let pendingTimers: Array<{ fn: () => void; ms: number }>;
+
+  beforeEach(() => {
+    pendingTimers = [];
+    realSetTimeout = global.setTimeout;
+    // Hold timers so a test decides whether Forms answers before the clear times out.
+    (global as any).setTimeout = (fn: () => void, ms?: number) => {
+      pendingTimers.push({ fn, ms: ms ?? 0 });
+      return pendingTimers.length;
+    };
+  });
+
+  afterEach(() => {
+    (global as any).setTimeout = realSetTimeout;
+    delete (window as any).skyslope;
+  });
+
+  // A component already on the token path, with a frame that records what we post to it.
+  async function onTokenPath() {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    const postMessage = jest.fn();
+    const iframeEl: any = { src: '', contentWindow: { postMessage } };
+    component.iframe = () => iframeEl;
+    await component.handleAuthFailed();
+    expect(iframeEl.src).toContain('#t=');
+    postMessage.mockClear();
+    return { component, emitted, iframeEl, postMessage };
+  }
+
+  const tokenCleared = (component: any, origin = formsOrigin()) =>
+    component.handleMessage({ origin, data: { status: 'token-cleared' } } as MessageEvent);
+
+  it('posts clear-token to the exact Forms origin, then reloads the frame without a token once Forms confirms', async () => {
+    const { component, iframeEl, postMessage } = await onTokenPath();
+
+    const clearing = component.clearToken();
+    expect(postMessage).toHaveBeenCalledWith({ status: 'clear-token' }, formsOrigin());
+    expect(iframeEl.src).toContain('#t='); // not reloaded before Forms answers
+    tokenCleared(component);
+    await clearing;
+
+    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src.startsWith(Env.formsUrl)).toBe(true);
+  });
+
+  it('reloads anyway after the timeout when Forms never answers (an older Forms)', async () => {
+    const { component, iframeEl } = await onTokenPath();
+
+    const clearing = component.clearToken();
+    const ackTimer = pendingTimers.find(t => t.ms === 3000);
+    expect(ackTimer).toBeDefined();
+    ackTimer.fn();
+    await clearing;
+
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+
+  it('ignores a token-cleared message from another origin', async () => {
+    const { component, iframeEl } = await onTokenPath();
+
+    const clearing = component.clearToken();
+    tokenCleared(component, 'https://evil.example');
+    await Promise.resolve();
+    expect(iframeEl.src).toContain('#t='); // still waiting
+
+    tokenCleared(component);
+    await clearing;
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+
+  it('stops renewing and leaves token mode, so the next cookie wall starts the token path for the next user', async () => {
+    const { component, emitted, iframeEl } = await onTokenPath();
+    expect(component.renewalTimer).not.toBeNull();
+
+    const clearing = component.clearToken();
+    tokenCleared(component);
+    await clearing;
+
+    expect(component.renewalTimer).toBeNull();
+    expect(component.token).toBeNull();
+    expect(component.tokenMode).toBe(false);
+    // A second wall is a fresh start, not the "already tried" loop guard.
+    await component.handleAuthFailed();
+    expect(iframeEl.src).toContain('#t=');
+    expect(emitted).toEqual([]);
+  });
+
+  it('is a no-op for the global API until an inline container registers', async () => {
+    const widget = new SkySlopeWidget();
+    await expect(widget.clearToken()).resolves.toBeUndefined();
+  });
+
+  it('routes the global widget.clearToken() to the registered container', async () => {
+    const widget = new SkySlopeWidget();
+    const clear = jest.fn().mockResolvedValue(undefined);
+    widget.registerClearToken(clear);
+    await widget.clearToken();
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+});

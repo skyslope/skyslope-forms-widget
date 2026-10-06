@@ -12,8 +12,8 @@ P1 means prioritize because compromise could affect embedding hosts or sensitive
 
 | Component | Security-relevant behavior and evidence |
 | --- | --- |
-| Global controller | `src/globalScript.ts:SkySlopeWidget` places a mutable singleton on `window.skyslope.widget`; holds path, IDP, inline mode, header variant, and navigation/reload callbacks. |
-| Inline iframe | `src/components/ss-container-inline/ss-container-inline.tsx` constructs URLs, adds tracking/configuration query parameters, assigns `iframe.src`, and sends a fixed reload message. |
+| Global controller | `src/globalScript.ts:SkySlopeWidget` places a mutable singleton on `window.skyslope.widget`; holds path, IDP, inline mode, header variant, and navigation/reload/refresh/clear-token callbacks. The host's optional `getToken` callback is kept in module scope, not on the singleton. |
+| Inline iframe | `src/components/ss-container-inline/ss-container-inline.tsx` constructs URLs, adds tracking/configuration query parameters, assigns `iframe.src`, and sends a fixed reload message. When Forms reports that its cookie sign-in failed (`forms-auth-failed`) and a `getToken` callback exists, it reloads the frame with a host token in the `#t=` fragment, renews that session by posting `set-token`, and on `clearToken()` posts `clear-token` and reloads without a token. |
 | Modal and buttons | `ss-container-modal.tsx` wraps the inline frame with customizable styles, overlay, and header controls. Button components call controller helpers and optionally open a modal. |
 | Environment binding | `environment.ts` defines development, integration, staging, and production Forms URLs. `stencil.config.ts` chooses one at build time; development is the default. |
 | Event integration | `readme.md:Listening for Events` documents a host-owned `message` listener and file/document/envelope metadata. The runtime library contains no inbound `window.message` validation/dispatch implementation. |
@@ -39,6 +39,9 @@ flowchart LR
     end
     HOST -->|Iframe URL with IDP and widgetTrack| FRAME[Forms iframe]
     HOST -->|reload with configured target origin| FRAME
+    CFG -->|getToken callback, module scope| HOST
+    HOST -->|"#t= token fragment; set-token and clear-token to the Forms origin"| FRAME
+    FRAME -->|"forms-auth-failed, token-installed, token-cleared (origin-checked)"| HOST
     FRAME -->|Documented status and identifier messages| LISTEN
     FRAME -->|Authentication and application workflows| REMOTE[Forms APIs and identity provider]
     FRAME -->|Workflow navigation, externally implemented| SIGN[DigiSign application]
@@ -50,7 +53,7 @@ The principal boundaries are executable distribution into the host origin; host-
 1. `initialize` stores host-supplied `idp`, `openInline`, and `headerVariant`. These are configuration hints, not authentication assertions.
 2. Navigation helpers set a path. `getUrl` concatenates the build-time Forms base and path, then uses `URL`/`URLSearchParams` to set query parameters.
 3. `widgetTrack` includes the host's origin, the literal event label `click`, and the complete configured widget path. It does not collect the host page's full URL, but the supplied path can itself contain sensitive query/fragment data.
-4. The iframe handles user authentication and Forms workflows externally. The parent sends only the string `reload`, with the configured Forms URL as `targetOrigin`, in the reviewed messaging code.
+4. The iframe handles user authentication and Forms workflows externally. The parent sends the string `reload`, and on the token path `{status: 'set-token', token}` and `{status: 'clear-token'}`, always with the configured Forms origin as `targetOrigin`. The token path starts only after Forms posts `forms-auth-failed` (its cookie sign-in failed, as with Safari's third-party cookie block) and the host configured `getToken`; the widget then reloads the frame with the token in the `#t=` fragment, which Forms reads and removes from history. Browsers whose cookie sign-in works never receive a token.
 5. Integrators are expected to receive remote status/identifier messages themselves. Their validation, follow-up API authorization, and handling of signing-origin transitions are outside this implementation.
 6. Removing an inline container reinitializes the global controller. Multiple containers compete for a single callback registration and global configuration.
 
@@ -58,7 +61,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 - Production, staging, and integration URLs are fixed HTTPS values in `environment.ts`; ordinary runtime initialization cannot select an arbitrary iframe base. The development URL is HTTP localhost.
 - `URLSearchParams` encodes added query values. With the checked-in trailing-slash base, an absolute-looking supplied path remains a path under that base; a local check confirmed this behavior. No direct arbitrary-origin navigation or script-URL execution is established by simple `navigateTo` input.
-- `reloadIframe` uses a specific target URL rather than wildcard `*`, and sends no document data or token. This protects outbound delivery but does not verify messages received by an integrator. If the frame has navigated to a different origin, reload delivery requires a separately verified protocol decision.
+- `reloadIframe`, `set-token` and `clear-token` use the exact Forms origin rather than wildcard `*`; `reload` and `clear-token` carry no document data or token. The container's own listener accepts only messages whose `event.origin` is the Forms origin and ignores malformed payloads; it does not bind `event.source` to its iframe. This protects outbound delivery but does not verify messages received by an integrator. If the frame has navigated to a different origin, reload delivery requires a separately verified protocol decision.
 - A cross-origin iframe preserves browser same-origin isolation. Shadow DOM provides component/style encapsulation, not a security boundary against the parent page's scripts. The iframe has no sandbox or explicit referrer policy and allows fullscreen.
 - The README explicitly requires integrators to obtain framing approval and configure company SSO. The actual server-side frame allowlist, authentication policy, and object authorization are not in this repository.
 - Duplicate navigation/reload callback registration throws rather than silently replacing an existing callback. This detects unsupported multiple-container use but does not provide robust instance ownership or lifecycle recovery.
@@ -84,7 +87,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 **Path and impact:** The example compares `event.origin` with a hostname without its scheme. A browser reports an origin including scheme, so legitimate HTTPS Forms messages do not satisfy that condition. Even after correcting that mismatch, the example lacks `event.source` binding to the intended iframe, payload-size/schema checks, status-specific identifier validation, and guarded JSON parsing. Other trusted-origin windows or malformed payloads can cause cross-workflow confusion or exceptions if accepted by the host. An unrelated hostile origin is not accepted by the exact broken comparison; this is not a proven arbitrary-origin bypass in shipped runtime code.
 
-**Controls/evidence:** The README attempts an origin check, and outgoing reload uses a fixed target origin. See `readme.md:Listening for Events` and `ss-container-inline.tsx:reloadIframe`. There is no central receive-side listener in the library. Signing events may originate elsewhere, but their emitter/origin behavior is not available here.
+**Controls/evidence:** The README attempts an origin check, and outgoing reload uses a fixed target origin. See `readme.md:Listening for Events` and `ss-container-inline.tsx:reloadIframe`. The library's only receive-side listener handles its own auth statuses (`forms-auth-failed`, `token-installed`, `token-cleared`); integrators still receive workflow messages themselves. Signing events may originate elsewhere, but their emitter/origin behavior is not available here.
 
 **Mitigation:** Publish or implement a validated receiver that checks exact environment-specific origins and the expected frame window, validates versioned discriminated payloads, catches parse errors, and correlates messages to a specific workflow. Treat returned IDs as references requiring server-side access checks, not proof of authorization or completion. Add tests for unexpected origins/sources, malformed data, and signing transitions.
 
@@ -149,6 +152,18 @@ The principal boundaries are executable distribution into the host origin; host-
 **Mitigation:** Fail release builds on ambiguous/missing environment selection, inspect the built endpoint/artifact manifest, require unit/contract/browser tests with network interception, and verify published version paths. Keep production and test artifacts clearly separated and immutable. Add explicit checks for iframe origin, receiver validation, SSO hints, and lifecycle restoration to the real release gate.
 
 **Residual risk:** Correctly built code still depends on remote APIs, cookies, framing policies, and browser behavior. Maintain an authorized cross-origin integration test matrix and rollback process.
+
+### FW-08 — Host tokens pass into the Forms frame and the session can outlast the host's sign-out
+
+**Priority/category:** P2; credential disclosure and stale identity. **Likelihood:** Medium where hosts record the page or never call `clearToken()`.
+
+**Path and impact:** On the token path a bearer token from the host's `getToken` is placed in the iframe `src` fragment for the reload and later posted to the frame for renewal. Fragments are not sent to servers, but the full `src` is readable by any script in the host origin, including session-replay or monitoring tools that record element attributes, until Forms loads and strips it. Forms keeps the resulting session in its tab's `sessionStorage`, so it survives a host sign-out or page reload in the same tab unless the host calls `clearToken()` while the widget is mounted.
+
+**Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are origin-checked; `clearToken()` posts `clear-token`, waits up to 3 seconds for `token-cleared`, then reloads the frame without a token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
+
+**Mitigation:** Integrators should exclude the widget iframe from session replay and call `clearToken()` on sign-out and user switch. Prefer short-lived, audience-limited tokens.
+
+**Residual risk:** Any script running in the host origin can read the token the host itself hands over; the widget cannot protect it from the host page.
 
 ## Open questions and recommended validation
 
