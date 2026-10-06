@@ -159,15 +159,36 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
     let calls = 0;
     const { component } = makeComponent(() => `token-${++calls}`);
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage } });
+    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+    await component.handleAuthFailed(); // on the token path, with token-1 in the URL
 
     await component.refreshToken();
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
-      { status: 'set-token', token: 'token-1' },
+      { status: 'set-token', token: 'token-2' },
       'http://localhost:3001' // Env.formsUrl origin in spec
     );
+  });
+
+  // A host that configured getToken but whose user signed in with cookies (Chrome, say) never
+  // left the cookie path. Pushing a token there would switch Forms to a sessionless session.
+  it('sends nothing on the cookie path, even with a getToken configured', async () => {
+    const getToken = jest.fn(() => 'token');
+    const { component } = makeComponent(getToken);
+    const postMessage = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+
+    await component.refreshToken();
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('URL-encodes the token it puts in the #t= fragment', async () => {
+    const { component, iframeEl } = makeComponent(() => 'a+b/c=d&e');
+    await component.handleAuthFailed();
+    expect(iframeEl.src.endsWith('#t=a%2Bb%2Fc%3Dd%26e')).toBe(true);
   });
 
   // A cookie-based host has no getToken. If it calls refreshToken() anyway - and the native

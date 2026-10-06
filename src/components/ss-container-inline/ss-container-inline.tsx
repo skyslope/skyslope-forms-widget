@@ -187,6 +187,9 @@ export class SsContainerInline {
     // nothing to renew and nothing has gone wrong, so this is a silent no-op: no retry
     // timer, no authError. Only the token path can fail to renew.
     if (readGetToken() == null) return;
+    // Only the token path renews. On the cookie path a pushed token would switch Forms to a
+    // sessionless session, and browsers whose cookies work must never receive a token.
+    if (!this.tokenMode) return;
 
     const previousExpiry = this.expiresAt;
     const generation = this.clearGeneration;
@@ -306,7 +309,7 @@ export class SsContainerInline {
 
     // Pass the token in the URL fragment (not a query param): fragments are not sent to
     // the server, and the Forms app strips it from history immediately on read.
-    return this.token != null ? `${url}#t=${this.token}` : url;
+    return this.token != null ? `${url}#t=${encodeURIComponent(this.token)}` : url;
   }
 
   private iframe = () => this.el.shadowRoot.getElementById('ss-container-iframe') as HTMLIFrameElement;
