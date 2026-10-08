@@ -110,6 +110,10 @@ export class SsContainerInline {
   // The clear in progress, so a second clearToken() call joins it instead of starting another.
   private clearing: Promise<void> | null = null;
 
+  // The renewal in progress. The timer and the visibility check can both fire at once; a second
+  // renewal would read the first one's answer as a renewal that gained nothing.
+  private renewing: Promise<void> | null = null;
+
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
   private decodeExpiry(jwt: string | null): number | null {
@@ -186,7 +190,16 @@ export class SsContainerInline {
   // Fetch a fresh token and hand it to the Forms app in place. `force` is used by the host's
   // own refreshToken() call, where an early rotation is intentional and the staleness check
   // would only get in the way.
-  private renewNow = async (force = false): Promise<void> => {
+  private renewNow = (force = false): Promise<void> => {
+    if (this.renewing != null) return this.renewing;
+    const renewal = this.runRenewal(force).finally(() => {
+      if (this.renewing === renewal) this.renewing = null;
+    });
+    this.renewing = renewal;
+    return renewal;
+  };
+
+  private runRenewal = async (force: boolean): Promise<void> => {
     // No token path configured - a cookie-based host, or the native web view. There is
     // nothing to renew and nothing has gone wrong, so this is a silent no-op: no retry
     // timer, no authError. Only the token path can fail to renew.
@@ -326,6 +339,16 @@ export class SsContainerInline {
     this.iframe()?.contentWindow?.postMessage('reload', this.formsOrigin());
   };
 
+  // Point the frame at the current Forms URL. Does nothing before the frame renders or before
+  // the host has set up window.skyslope, rather than loading an empty src.
+  private loadFrame(): boolean {
+    const iframe = this.iframe();
+    const url = this.getUrl();
+    if (iframe == null || url === '') return false;
+    iframe.src = url;
+    return true;
+  }
+
   private navigateTo = async () => {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
@@ -333,8 +356,7 @@ export class SsContainerInline {
     const generation = this.clearGeneration;
     if (this.tokenMode) await this.resolveToken();
     if (generation !== this.clearGeneration) return;
-    const iframe = this.iframe();
-    if (iframe != null) iframe.src = this.getUrl();
+    this.loadFrame();
   };
 
   // Renew the session in place. Exposed to the host as widget.refreshToken() for the case
@@ -358,6 +380,7 @@ export class SsContainerInline {
     const generation = ++this.clearGeneration;
     // Stop renewing and forget the token first, so nothing sends it again.
     this.clearRenewalTimer();
+    this.renewing = null;
     this.token = null;
     this.expiresAt = null;
     this.lastReportedExpiry = null;
@@ -370,8 +393,7 @@ export class SsContainerInline {
     // Unmounted while waiting: there is no frame left to reload.
     if (generation !== this.clearGeneration) return;
     // Reload without a token. Anything still running in the old page goes away with it.
-    const iframe = this.iframe();
-    if (iframe != null) iframe.src = this.getUrl();
+    this.loadFrame();
   };
 
   // Post forms-clear-token to the exact Forms origin and wait for forms-token-cleared, or give up after a
@@ -440,9 +462,7 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
-    const iframe = this.iframe();
-    if (iframe == null) return;
-    iframe.src = this.getUrl();
+    if (!this.loadFrame()) return;
     this.lastSentExpiry = this.decodeExpiry(this.token);
     // From here the session lives on a token with a finite life, so start watching it.
     this.scheduleRenewal(this.lastSentExpiry);
@@ -463,6 +483,7 @@ export class SsContainerInline {
     window.removeEventListener('message', this.handleMessage);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.clearRenewalTimer();
+    this.renewing = null;
     // this is not actually needed, but I think makes more sense to reinitialize the globalScript stuff if this component isn't alive
     reinitializeGlobalScript();
   }

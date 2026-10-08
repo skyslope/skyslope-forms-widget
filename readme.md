@@ -150,7 +150,9 @@ before the token runs out — the widget emits an `authError` event
 on the container element so the host page can react (for example, by re-authenticating the user)
 instead of the iframe silently failing. The event is fired by `ss-container-inline` and bubbles out
 of `ss-container-modal`, so `addEventListener` works on either element; in typed JSX, `onAuthError`
-is declared on `ss-container-inline`:
+is declared on `ss-container-inline`. One failure can raise two events: when `getToken` throws or
+times out during the fallback, the widget emits `token-callback-failed` with the error, then
+`iframe-auth-failed` because no token could be handed over.
 
 ```javascript
 document.querySelector('ss-container-modal')

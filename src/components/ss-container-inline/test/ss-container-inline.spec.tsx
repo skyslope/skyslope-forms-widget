@@ -226,6 +226,14 @@ describe('ss-container-inline reload', () => {
     expect(() => component.reloadIframe()).not.toThrow();
   });
 
+  it('leaves the frame alone if the host navigates before setting up window.skyslope', async () => {
+    const { component, iframeEl } = makeComponent(null);
+    iframeEl.src = 'http://localhost:3001/current';
+    delete (window as any).skyslope;
+    await component.navigateTo();
+    expect(iframeEl.src).toBe('http://localhost:3001/current');
+  });
+
   it('posts reload to the Forms origin', () => {
     const { component } = makeComponent(null);
     const postMessage = jest.fn();
@@ -421,6 +429,43 @@ describe('ss-container-inline renewal scheduling', () => {
     component.handleTokenInstalled({ ok: true, exp: sessionExp });
 
     expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
+  });
+
+  it('runs one renewal when the timer and the visibility check fire together', async () => {
+    let call = 0;
+    let release: (token: string) => void = () => {};
+    const { component, emitted } = makeComponent(() => {
+      call += 1;
+      if (call === 1) return jwtExpiringIn(3600, 'first');
+      return new Promise<string>(resolve => (release = resolve));
+    });
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+
+    const fromTimer = component.renewNow();
+    const fromVisibility = component.renewNow();
+    release(jwtExpiringIn(7200, 'second'));
+    await Promise.all([fromTimer, fromVisibility]);
+
+    expect(call).toBe(2);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(emitted).toEqual([]);
+  });
+
+  it('does not join a renewal from before a clear, even one still waiting on getToken', async () => {
+    let call = 0;
+    const { component } = makeComponent(() => {
+      call += 1;
+      if (call === 2) return new Promise<string>(() => {});
+      return jwtExpiringIn(3600, `t${call}`);
+    });
+    withIframe(component);
+    await component.handleAuthFailed();
+    const stuck = component.renewNow();
+
+    void component.clearToken();
+
+    expect(component.renewNow()).not.toBe(stuck);
   });
 
   it('treats a host that hands back a no-later token as a failed renewal', async () => {
