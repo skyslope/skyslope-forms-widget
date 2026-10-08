@@ -135,12 +135,21 @@ the session it built from your token in its own tab storage, so without this it 
 sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal,
 asks the Forms app to drop that session, and reloads the iframe without a token; it resolves once
 the reload has started. If the Forms version in use does not confirm within 3 seconds, the widget
-reloads anyway. The next user then goes through the same fallback with a fresh `getToken` call.
+reloads anyway.
+
+Order matters. In browsers that block third-party cookies, the reload after `clearToken()` hits the
+same cookie wall and the widget calls `getToken` again. Sign the user out of your app first, so
+`getToken` returns `null`, then call `clearToken()`, and only then unmount the widget or leave the
+page. If `getToken` still returns the old user's token when the reload asks for one, that user is
+signed straight back in. For a user switch, switch your app to the new user first; the reload then
+signs in the new user. After a sign-out, that reload finds no token and raises an `authError`
+(`iframe-auth-failed`), which you can ignore while nobody is signed in.
 
 ```javascript
 async function signOut() {
-  await window.skyslope.widget.clearToken();
-  await myApp.signOut();
+  await myApp.signOut(); // from here getToken returns null
+  await window.skyslope.widget.clearToken(); // the widget must still be mounted
+  myApp.showSignedOutPage();
 }
 ```
 

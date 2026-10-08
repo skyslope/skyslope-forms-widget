@@ -161,7 +161,7 @@ The principal boundaries are executable distribution into the host origin; host-
 
 **Controls/evidence:** `getToken` lives in module scope and is called only after `forms-auth-failed`; outbound messages target the exact Forms origin; inbound statuses are checked for the Forms origin and the widget's own frame; `clearToken()` posts `forms-clear-token`, waits up to 3 seconds for `forms-token-cleared`, then reloads the frame without a token, and token work still waiting on `getToken` when it is called stops instead of sending the earlier token. See `globalScript.ts:readGetToken` and `ss-container-inline.tsx:handleAuthFailed`/`clearToken`.
 
-**Mitigation:** Integrators should exclude the widget iframe from session replay and call `clearToken()` on sign-out and user switch. Prefer short-lived, audience-limited tokens.
+**Mitigation:** Integrators should exclude the widget iframe from session replay and call `clearToken()` on sign-out and user switch, after their own sign-out or switch has taken effect: the reload after a clear asks `getToken` again in cookie-blocked browsers, and a host that still returns the old user's token signs that user back in. Prefer short-lived, audience-limited tokens.
 
 **Residual risk:** Any script running in the host origin can read the token the host itself hands over; the widget cannot protect it from the host page.
 
