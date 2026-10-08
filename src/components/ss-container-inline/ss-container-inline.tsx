@@ -66,7 +66,7 @@ export class SsContainerInline {
    * inside the iframe, and 'token-renewal-failed' when a renewal could not be completed
    * before the current token ran out.
    */
-  @Event() authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
+  @Event({ bubbles: true, composed: true }) authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
   // The token most recently handed to the Forms app. Null until the cookie-free fallback is
   // triggered (see tokenMode): the iframe loads WITHOUT a token so browsers whose cookie auth
@@ -440,7 +440,9 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
-    this.iframe().src = this.getUrl();
+    const iframe = this.iframe();
+    if (iframe == null) return;
+    iframe.src = this.getUrl();
     this.lastSentExpiry = this.decodeExpiry(this.token);
     // From here the session lives on a token with a finite life, so start watching it.
     this.scheduleRenewal(this.lastSentExpiry);
