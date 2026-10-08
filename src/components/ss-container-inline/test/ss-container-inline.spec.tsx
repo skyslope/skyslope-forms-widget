@@ -166,7 +166,7 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
-      { status: 'set-token', token: 'token-2' },
+      { status: 'forms-set-token', token: 'token-2' },
       'http://localhost:3001' // Env.formsUrl origin in spec
     );
   });
@@ -389,7 +389,7 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewalTimer).toBeNull();
   });
 
-  it('renews by posting set-token to the Forms origin, never by reloading', async () => {
+  it('renews by posting forms-set-token to the Forms origin, never by reloading', async () => {
     let call = 0;
     const { component, iframeEl } = makeComponent(() => (++call === 1 ? jwtExpiringIn(3600, 'first') : jwtExpiringIn(7200, 'second')));
     const postMessage = withIframe(component);
@@ -400,7 +400,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     const [payload, targetOrigin] = postMessage.mock.calls[0];
-    expect(payload.status).toBe('set-token');
+    expect(payload.status).toBe('forms-set-token');
     expect(payload.token).toBe(component.token);
     // The replacement really is a different token, not the bootstrap one re-sent.
     expect(payload.token).not.toBe(srcAfterBootstrap.split('#t=')[1]);
@@ -488,7 +488,7 @@ describe('ss-container-inline renewal scheduling', () => {
     await component.renewNow();
 
     expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage.mock.calls[0][0].status).toBe('set-token');
+    expect(postMessage.mock.calls[0][0].status).toBe('forms-set-token');
   });
 
   it('stops a renewal that was waiting on getToken when the container went away', async () => {
@@ -553,13 +553,13 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
   }
 
   const tokenCleared = (component: any, origin = formsOrigin(), source = component.iframe()?.contentWindow) =>
-    component.handleMessage({ origin, source, data: { status: 'token-cleared' } } as MessageEvent);
+    component.handleMessage({ origin, source, data: { status: 'forms-token-cleared' } } as MessageEvent);
 
-  it('posts clear-token to the exact Forms origin, then reloads the frame without a token once Forms confirms', async () => {
+  it('posts forms-clear-token to the exact Forms origin, then reloads the frame without a token once Forms confirms', async () => {
     const { component, iframeEl, postMessage } = await onTokenPath();
 
     const clearing = component.clearToken();
-    expect(postMessage).toHaveBeenCalledWith({ status: 'clear-token' }, formsOrigin());
+    expect(postMessage).toHaveBeenCalledWith({ status: 'forms-clear-token' }, formsOrigin());
     expect(iframeEl.src).toContain('#t='); // not reloaded before Forms answers
     tokenCleared(component);
     await clearing;
@@ -580,7 +580,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src).not.toContain('#t=');
   });
 
-  it('ignores a token-cleared message from another origin', async () => {
+  it('ignores a forms-token-cleared message from another origin', async () => {
     const { component, iframeEl } = await onTokenPath();
 
     const clearing = component.clearToken();
@@ -634,7 +634,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     pending.settle(jwtExpiringIn(3600, 'previous-user'));
     await renewing;
 
-    expect(postMessage).not.toHaveBeenCalled(); // no set-token after the sign-out
+    expect(postMessage).not.toHaveBeenCalled(); // no forms-set-token after the sign-out
     expect(component.token).toBeNull();
     expect(component.renewalTimer).toBeNull();
     expect(iframeEl.src).not.toContain('#t=');
@@ -694,14 +694,14 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src).not.toContain('#t=');
   });
 
-  it('ignores a token-installed that arrives after the clear', async () => {
+  it('ignores a forms-token-installed that arrives after the clear', async () => {
     const { component } = await onTokenPath();
     await clearWithAck(component);
 
     component.handleMessage({
       origin: formsOrigin(),
       source: component.iframe()?.contentWindow,
-      data: { status: 'token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 },
+      data: { status: 'forms-token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 },
     } as MessageEvent);
 
     expect(component.renewalTimer).toBeNull();
@@ -720,7 +720,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src).toContain('#t=');
   });
 
-  it('ignores a token-cleared from another window on the Forms origin', async () => {
+  it('ignores a forms-token-cleared from another window on the Forms origin', async () => {
     const { component, iframeEl } = await onTokenPath();
 
     const clearing = component.clearToken();

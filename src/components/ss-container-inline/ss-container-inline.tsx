@@ -8,18 +8,18 @@ const FORMS_AUTH_FAILED = 'forms-auth-failed';
 
 // Sent by the widget TO the Forms app to hand over a fresh token for in-place session
 // renewal (the Forms app imports it without reloading). Paired with a files-ui listener.
-const FORMS_SET_TOKEN = 'set-token';
+const FORMS_SET_TOKEN = 'forms-set-token';
 
 // Sent back by the Forms app once it has tried to install a token we pushed. Carries the
 // expiry of the token the SESSION ended up with, which is what we re-arm the timer on.
-const FORMS_TOKEN_INSTALLED = 'token-installed';
+const FORMS_TOKEN_INSTALLED = 'forms-token-installed';
 
 // Sent by the widget TO the Forms app when the host signs the user out or switches users, so
 // Forms drops the session it built from our tokens. Paired with a files-ui listener.
-const FORMS_CLEAR_TOKEN = 'clear-token';
+const FORMS_CLEAR_TOKEN = 'forms-clear-token';
 
 // Sent back by the Forms app once it has dropped that session.
-const FORMS_TOKEN_CLEARED = 'token-cleared';
+const FORMS_TOKEN_CLEARED = 'forms-token-cleared';
 
 // How long clearToken() waits for Forms to confirm before reloading the frame anyway. An older
 // Forms never answers, and the host should not wait long on its own sign-out.
@@ -374,7 +374,7 @@ export class SsContainerInline {
     if (iframe != null) iframe.src = this.getUrl();
   };
 
-  // Post clear-token to the exact Forms origin and wait for token-cleared, or give up after a
+  // Post forms-clear-token to the exact Forms origin and wait for forms-token-cleared, or give up after a
   // short timeout. Never rejects.
   private askFormsToClear(): Promise<void> {
     return new Promise(resolve => {
