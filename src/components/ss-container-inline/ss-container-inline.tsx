@@ -21,6 +21,11 @@ const FORMS_CLEAR_TOKEN = 'forms-clear-token';
 // Sent back by the Forms app once it has dropped that session.
 const FORMS_TOKEN_CLEARED = 'forms-token-cleared';
 
+// Sent by the Forms app each time it loads in the frame, with the expiry of the token its
+// session is using. The first sign-in (the #t= reload) gets no forms-token-installed answer, and
+// that session token can expire before the host token we sent, so the first renewal is timed on this.
+const FORMS_SESSION_EXPIRY = 'forms-session-expiry';
+
 // How long clearToken() waits for Forms to confirm before reloading the frame anyway. An older
 // Forms never answers, and the host should not wait long on its own sign-out.
 const CLEAR_ACK_TIMEOUT_MS = 3 * 1000;
@@ -438,8 +443,22 @@ export class SsContainerInline {
     }
     if (data?.status === FORMS_TOKEN_CLEARED) {
       this.clearAck?.();
+      return;
+    }
+    if (data?.status === FORMS_SESSION_EXPIRY) {
+      this.handleSessionExpiry(data);
     }
   };
+
+  // Re-time the next renewal on the session's own expiry. Unlike a renewal answer, the same expiry
+  // arriving again (Forms reloading inside the frame) is normal, so this skips the no-gain check.
+  private handleSessionExpiry(data: { exp?: number }): void {
+    if (!this.tokenMode) return;
+    if (typeof data.exp !== 'number' || !isFinite(data.exp)) return;
+    const expiry = data.exp * 1000;
+    this.lastReportedExpiry = expiry;
+    this.scheduleRenewal(expiry);
+  }
 
   // The Forms app could not authenticate inside the iframe (e.g. Safari's third-party-cookie
   // wall). If a getToken callback exists and we have not already tried, switch to the cookie-free

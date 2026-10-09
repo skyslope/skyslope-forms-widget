@@ -41,7 +41,7 @@ flowchart LR
     HOST -->|reload with configured target origin| FRAME
     CFG -->|getToken callback, module scope| HOST
     HOST -->|"#t= token fragment; forms-set-token and forms-clear-token to the Forms origin"| FRAME
-    FRAME -->|"forms-auth-failed, forms-token-installed, forms-token-cleared (origin and frame checked)"| HOST
+    FRAME -->|"forms-auth-failed, forms-token-installed, forms-token-cleared, forms-session-expiry (origin and frame checked)"| HOST
     FRAME -->|Documented status and identifier messages| LISTEN
     FRAME -->|Authentication and application workflows| REMOTE[Forms APIs and identity provider]
     FRAME -->|Workflow navigation, externally implemented| SIGN[DigiSign application]

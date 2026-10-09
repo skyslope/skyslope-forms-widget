@@ -418,6 +418,60 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(iframeEl.src).toBe(srcAfterBootstrap);
   });
 
+  it('times the first renewal on the session expiry Forms reports after the sign-in reload', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    const frame = { postMessage: jest.fn() };
+    component.iframe = () => ({ contentWindow: frame, src: '' });
+    await component.handleAuthFailed();
+    // The exchange can hand Forms a cached token that runs out well before the host token.
+    const sessionExp = Math.floor(Date.now() / 1000) + 1200;
+
+    component.handleMessage({
+      origin: 'http://localhost:3001',
+      source: frame,
+      data: { status: 'forms-session-expiry', exp: sessionExp },
+    } as any);
+
+    expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
+    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+  });
+
+  it('accepts the same session expiry again when Forms reloads inside the frame', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    const sessionExp = Math.floor(Date.now() / 1000) + 1200;
+
+    component.handleSessionExpiry({ exp: sessionExp });
+    component.handleSessionExpiry({ exp: sessionExp });
+
+    expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(emitted).toEqual([]);
+  });
+
+  it('ignores a session expiry on the cookie path', () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+
+    component.handleSessionExpiry({ exp: Math.floor(Date.now() / 1000) + 1200 });
+
+    expect(component.renewalTimer).toBeNull();
+    expect(component.lastReportedExpiry).toBeNull();
+  });
+
+  it('ignores a session expiry that is not a number', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    const before = renewalDelay(component);
+
+    component.handleSessionExpiry({ exp: 'soon' });
+
+    expect(renewalDelay(component)).toBe(before);
+    expect(component.lastReportedExpiry).toBeNull();
+  });
+
   it('re-arms on the expiry Forms reports, not the one the host token carried', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);
