@@ -153,6 +153,23 @@ async function signOut() {
 }
 ```
 
+When the widget's container leaves the page, the widget resets: `window.skyslope.widget` is
+replaced and every setting passed to `initialize()`, including `getToken`, is dropped. This also
+happens when `closeModal()` closes the modal. So call `initialize()` again before each
+`openModal()` and each time you add `ss-container-inline` to the page. Calling it again is safe; it
+sets the same values. Always reach the widget through `window.skyslope.widget` rather than a saved
+reference, because a saved reference points at the old widget after a reset and its calls do
+nothing. If `getToken` is missing after a reset, browsers that block third-party cookies cannot
+sign in and the widget emits `authError` (`iframe-auth-failed`); browsers where cookie sign-in
+works are not affected, so test a second open in Safari.
+
+```javascript
+function openForms() {
+  window.skyslope.widget.initialize({ getToken: myApp.getSkySlopeAccessToken });
+  window.skyslope.widget.openModal();
+}
+```
+
 If authentication cannot be established or kept — `getToken` throws or returns nothing, the
 embedded Forms app reports its own auth failure from inside the iframe, or a renewal fails twice
 before the token runs out — the widget emits an `authError` event
