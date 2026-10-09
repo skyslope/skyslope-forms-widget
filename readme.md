@@ -178,12 +178,14 @@ instead of the iframe silently failing. The event is fired by `ss-container-inli
 of `ss-container-modal`, so `addEventListener` works on either element; in typed JSX, `onAuthError`
 is declared on `ss-container-inline`. One failure can raise two events: when `getToken` throws or
 times out during the fallback, the widget emits `token-callback-failed` with the error, then
-`iframe-auth-failed` because no token could be handed over.
+`iframe-auth-failed` because no token could be handed over. `signed-out` means the user signed out
+inside the Forms app during a token session: Forms has dropped its session and the widget has
+stopped renewing, so sign the user out of your app or close the widget.
 
 ```javascript
 document.querySelector('ss-container-modal')
   .addEventListener('authError', event => {
-    // event.detail.reason is 'token-callback-failed', 'iframe-auth-failed' or 'token-renewal-failed'
+    // event.detail.reason is 'token-callback-failed', 'iframe-auth-failed', 'token-renewal-failed' or 'signed-out'
     console.warn('Forms widget auth failed:', event.detail.reason);
   });
 ```

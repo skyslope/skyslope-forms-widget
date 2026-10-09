@@ -486,6 +486,32 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.lastReportedExpiry).toBeNull();
   });
 
+  it('stops renewing and tells the host when the user signs out inside Forms', async () => {
+    const { component, emitted, iframeEl } = makeComponent(() => jwtExpiringIn(3600));
+    const frame = { postMessage: jest.fn() };
+    component.iframe = () => ({ contentWindow: frame, get src() { return iframeEl.src; }, set src(v) { iframeEl.src = v; } });
+    await component.handleAuthFailed();
+    const srcAfterSignIn = iframeEl.src;
+
+    component.handleMessage({ origin: 'http://localhost:3001', source: frame, data: { status: 'forms-signed-out' } } as any);
+
+    expect(component.renewalTimer).toBeNull();
+    expect(component.tokenMode).toBe(false);
+    expect(component.token).toBeNull();
+    expect(emitted).toEqual([{ reason: 'signed-out' }]);
+    // No reload: it would hit the cookie wall and sign the user straight back in.
+    expect(iframeEl.src).toBe(srcAfterSignIn);
+  });
+
+  it('ignores a signed-out message on the cookie path', () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+
+    component.handleSignedOut();
+
+    expect(emitted).toEqual([]);
+  });
+
   it('re-arms on the expiry Forms reports, not the one the host token carried', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);

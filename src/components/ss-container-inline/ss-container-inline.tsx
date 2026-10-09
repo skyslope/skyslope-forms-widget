@@ -26,6 +26,10 @@ const FORMS_TOKEN_CLEARED = 'forms-token-cleared';
 // that session token can expire before the host token we sent, so the first renewal is timed on this.
 const FORMS_SESSION_EXPIRY = 'forms-session-expiry';
 
+// Sent by the Forms app when the user signed out inside it during a token session. Forms has
+// already dropped the session; the host decides what happens next.
+const FORMS_SIGNED_OUT = 'forms-signed-out';
+
 // How long clearToken() waits for Forms to confirm before reloading the frame anyway. An older
 // Forms never answers, and the host should not wait long on its own sign-out.
 const CLEAR_ACK_TIMEOUT_MS = 3 * 1000;
@@ -53,7 +57,7 @@ const RENEWAL_RETRY_MS = 30 * 1000;
 // hands back the same near-dead token from a cache would otherwise put us in a tight loop.
 const MIN_EXPIRY_GAIN_MS = 60 * 1000;
 
-export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed' | 'token-renewal-failed';
+export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed' | 'token-renewal-failed' | 'signed-out';
 
 @Component({
   tag: 'ss-container-inline',
@@ -382,8 +386,19 @@ export class SsContainerInline {
   };
 
   private runClear = async (): Promise<void> => {
+    const generation = this.forgetToken();
+
+    await this.askFormsToClear();
+    // Unmounted while waiting: there is no frame left to reload.
+    if (generation !== this.clearGeneration) return;
+    // Reload without a token. Anything still running in the old page goes away with it.
+    this.loadFrame();
+  };
+
+  // Stop renewing and forget the token, so nothing sends it again. Bumping clearGeneration makes
+  // token work that is still waiting on the host stand down.
+  private forgetToken(): number {
     const generation = ++this.clearGeneration;
-    // Stop renewing and forget the token first, so nothing sends it again.
     this.clearRenewalTimer();
     this.renewing = null;
     this.token = null;
@@ -393,13 +408,16 @@ export class SsContainerInline {
     this.renewalRetryUsed = false;
     // Leave token mode so the next cookie wall can start the token path again, for the next user.
     this.tokenMode = false;
+    return generation;
+  }
 
-    await this.askFormsToClear();
-    // Unmounted while waiting: there is no frame left to reload.
-    if (generation !== this.clearGeneration) return;
-    // Reload without a token. Anything still running in the old page goes away with it.
-    this.loadFrame();
-  };
+  // The user signed out inside Forms, which already dropped its session. Stop renewing, and leave
+  // the frame where it is: a reload would hit the cookie wall and sign the user straight back in.
+  private handleSignedOut(): void {
+    if (!this.tokenMode) return;
+    this.forgetToken();
+    this.authError.emit({ reason: 'signed-out' });
+  }
 
   // Post forms-clear-token to the exact Forms origin and wait for forms-token-cleared, or give up after a
   // short timeout. Never rejects.
@@ -447,6 +465,10 @@ export class SsContainerInline {
     }
     if (data?.status === FORMS_SESSION_EXPIRY) {
       this.handleSessionExpiry(data);
+      return;
+    }
+    if (data?.status === FORMS_SIGNED_OUT) {
+      this.handleSignedOut();
     }
   };
 
