@@ -450,14 +450,13 @@ export class SsContainerInline {
     }
   };
 
-  // Re-time the next renewal on the session's own expiry. Unlike a renewal answer, the same expiry
-  // arriving again (Forms reloading inside the frame) is normal, so this skips the no-gain check.
+  // Re-time the next renewal on the session's own expiry. Only the timer moves: this is not a
+  // renewal answer, so it neither runs nor sets up the no-gain check (Forms sends the same expiry
+  // again after reloading inside the frame, and a renewal right after sign-in may get it back too).
   private handleSessionExpiry(data: { exp?: number }): void {
     if (!this.tokenMode) return;
     if (typeof data.exp !== 'number' || !isFinite(data.exp)) return;
-    const expiry = data.exp * 1000;
-    this.lastReportedExpiry = expiry;
-    this.scheduleRenewal(expiry);
+    this.scheduleRenewal(data.exp * 1000);
   }
 
   // The Forms app could not authenticate inside the iframe (e.g. Safari's third-party-cookie

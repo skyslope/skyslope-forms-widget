@@ -433,7 +433,21 @@ describe('ss-container-inline renewal scheduling', () => {
     } as any);
 
     expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
-    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+  });
+
+  it('still accepts a renewal right after sign-in that comes back with the reported session expiry', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    const sessionExp = Math.floor(Date.now() / 1000) + 1200;
+    component.handleSessionExpiry({ exp: sessionExp });
+
+    // The exchange hands back the same cached session token for an early host rotation.
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(emitted).toEqual([]);
+    expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
   });
 
   it('accepts the same session expiry again when Forms reloads inside the frame', async () => {
