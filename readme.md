@@ -129,6 +129,12 @@ Forms origin, so the token stays out of the iframe URL). This requires a Forms v
 accepts the token handoff; on older versions it is a safe no-op and the token still refreshes
 on navigation.
 
+The Forms app hands the user off to DigiSign (the envelope builder) by moving the iframe to
+DigiSign. When the fallback is active, DigiSign cannot sign in by cookie either, so it asks the
+widget for a token; the widget calls `getToken` and hands the token to DigiSign the same way, and
+renewals and `clearToken()` then go to whichever app is in the frame. This needs a DigiSign version
+that accepts the token handoff. Browsers where cookie sign-in works never take this path.
+
 When your user signs out or you switch to a different user, call
 `await window.skyslope.widget.clearToken()` while the widget is still mounted. The Forms app keeps
 the session it built from your token in its own tab storage, so without this it can outlast your

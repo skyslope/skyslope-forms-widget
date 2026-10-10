@@ -30,6 +30,25 @@ const FORMS_SESSION_EXPIRY = 'forms-session-expiry';
 // already dropped the session; the host decides what happens next.
 const FORMS_SIGNED_OUT = 'forms-signed-out';
 
+// The same token hand-off for the DigiSign sender. Forms hands the user off to DigiSign by
+// navigating our frame there; in a token session DigiSign cannot sign in by cookie either, so it
+// asks us for a token. DigiSign -> widget: no session, waiting for a token.
+const DIGISIGN_AUTH_REQUIRED = 'digisign-auth-required';
+// widget -> DigiSign: a token to install (the first one and every renewal).
+const DIGISIGN_SET_TOKEN = 'digisign-set-token';
+// DigiSign -> widget: the outcome, with the expiry of the token its session uses.
+const DIGISIGN_TOKEN_INSTALLED = 'digisign-token-installed';
+// widget -> DigiSign: the host signed out; drop the session.
+const DIGISIGN_CLEAR_TOKEN = 'digisign-clear-token';
+// DigiSign -> widget: the session is gone.
+const DIGISIGN_TOKEN_CLEARED = 'digisign-token-cleared';
+// DigiSign -> widget: it gave up waiting for a token.
+const DIGISIGN_AUTH_FAILED = 'digisign-auth-failed';
+
+// Which app is in our frame. Its URL is another origin we cannot read, so we go by which app
+// last sent us a message.
+type FrameApp = 'forms' | 'digisign';
+
 // How long clearToken() waits for Forms to confirm before reloading the frame anyway. An older
 // Forms never answers, and the host should not wait long on its own sign-out.
 const CLEAR_ACK_TIMEOUT_MS = 3 * 1000;
@@ -122,6 +141,9 @@ export class SsContainerInline {
   // The renewal in progress. The timer and the visibility check can both fire at once; a second
   // renewal would read the first one's answer as a renewal that gained nothing.
   private renewing: Promise<void> | null = null;
+
+  // The app that last spoke to us from our frame. Renewals and clears go to it.
+  private frameApp: FrameApp = 'forms';
 
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
@@ -233,7 +255,7 @@ export class SsContainerInline {
       return;
     }
 
-    this.postTokenToForms(this.token);
+    this.postTokenToFrame(this.token);
     this.lastSentExpiry = nextExpiry;
     // Arm on what we can see for now. Forms answers with the expiry of the token the session
     // actually ended up using — after an exchange that can differ — and we re-arm on that.
@@ -258,6 +280,16 @@ export class SsContainerInline {
   // happened to be listening.
   private postTokenToForms(token: string): void {
     this.iframe()?.contentWindow?.postMessage({ status: FORMS_SET_TOKEN, token }, this.formsOrigin());
+  }
+
+  private postTokenToDigisign(token: string): void {
+    this.iframe()?.contentWindow?.postMessage({ status: DIGISIGN_SET_TOKEN, token }, this.digisignOrigin());
+  }
+
+  // A renewal goes to whichever app is in the frame now.
+  private postTokenToFrame(token: string): void {
+    if (this.frameApp === 'digisign') this.postTokenToDigisign(token);
+    else this.postTokenToForms(token);
   }
 
   private handleTokenInstalled(data: { ok?: boolean; exp?: number }): void {
@@ -344,6 +376,9 @@ export class SsContainerInline {
   // The only origin we send to or accept messages from.
   private formsOrigin = (): string => new URL(Env.formsUrl).origin;
 
+  // The only DigiSign origin we send tokens to or accept messages from.
+  private digisignOrigin = (): string => new URL(Env.digisignUrl).origin;
+
   private reloadIframe = () => {
     this.iframe()?.contentWindow?.postMessage('reload', this.formsOrigin());
   };
@@ -354,6 +389,13 @@ export class SsContainerInline {
     const iframe = this.iframe();
     const url = this.getUrl();
     if (iframe == null || url === '') return false;
+    // A URL that carries a token is loaded by navigating the frame's own window. The src attribute
+    // stays in the host page's DOM for the whole session, where other scripts and session-replay
+    // tools could read the token.
+    if (this.token != null && iframe.contentWindow != null) {
+      iframe.contentWindow.location.replace(url);
+      return true;
+    }
     iframe.src = url;
     return true;
   }
@@ -411,6 +453,55 @@ export class SsContainerInline {
     return generation;
   }
 
+  // Messages from the DigiSign sender in our frame. Same trust rule as Forms: its exact origin,
+  // and only from our own frame.
+  private handleDigisignMessage(event: MessageEvent): void {
+    const frameWindow = this.iframe()?.contentWindow;
+    if (frameWindow == null || event.source !== frameWindow) return;
+    let data: { status?: string; ok?: boolean; exp?: number };
+    try {
+      data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    } catch {
+      return;
+    }
+    this.frameApp = 'digisign';
+    if (data?.status === DIGISIGN_AUTH_REQUIRED) {
+      void this.handleDigisignAuthRequired();
+      return;
+    }
+    if (data?.status === DIGISIGN_TOKEN_INSTALLED) {
+      this.handleTokenInstalled(data);
+      return;
+    }
+    if (data?.status === DIGISIGN_TOKEN_CLEARED) {
+      this.clearAck?.();
+      return;
+    }
+    if (data?.status === DIGISIGN_AUTH_FAILED) {
+      this.authError.emit({ reason: 'iframe-auth-failed' });
+    }
+  }
+
+  // DigiSign has no session in our frame and is waiting for a token. Only a token session gets
+  // here: Forms tells DigiSign to ask only when Forms itself is signed in from our tokens, so a
+  // cookie session never receives a token. Fetch one and post it to DigiSign's exact origin.
+  private handleDigisignAuthRequired = async () => {
+    if (!this.tokenMode || readGetToken() == null) {
+      this.authError.emit({ reason: 'iframe-auth-failed' });
+      return;
+    }
+    const generation = this.clearGeneration;
+    await this.resolveToken();
+    if (generation !== this.clearGeneration) return;
+    if (this.token == null) {
+      this.authError.emit({ reason: 'iframe-auth-failed' });
+      return;
+    }
+    this.postTokenToDigisign(this.token);
+    this.lastSentExpiry = this.decodeExpiry(this.token);
+    this.scheduleRenewal(this.lastSentExpiry);
+  };
+
   // The user signed out inside Forms, which already dropped its session. Stop renewing, and leave
   // the frame where it is: a reload would hit the cookie wall and sign the user straight back in.
   private handleSignedOut(): void {
@@ -435,16 +526,23 @@ export class SsContainerInline {
         done();
         return;
       }
-      target.postMessage({ status: FORMS_CLEAR_TOKEN }, this.formsOrigin());
+      // If DigiSign is in the frame, it holds the session to clear.
+      if (this.frameApp === 'digisign') target.postMessage({ status: DIGISIGN_CLEAR_TOKEN }, this.digisignOrigin());
+      else target.postMessage({ status: FORMS_CLEAR_TOKEN }, this.formsOrigin());
     });
   }
 
   private handleMessage = (event: MessageEvent) => {
+    if (event.origin === this.digisignOrigin() && event.origin !== this.formsOrigin()) {
+      this.handleDigisignMessage(event);
+      return;
+    }
     // Only trust messages from the Forms origin we framed, and from our own frame: another window
     // on the same origin (a second Forms tab, say) must not drive this widget's auth state.
     if (event.origin !== this.formsOrigin()) return;
     const frameWindow = this.iframe()?.contentWindow;
     if (frameWindow == null || event.source !== frameWindow) return;
+    this.frameApp = 'forms';
     let data: { status?: string; ok?: boolean; exp?: number };
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;

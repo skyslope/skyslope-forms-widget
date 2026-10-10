@@ -8,6 +8,7 @@ import { SkySlopeWidget } from '../../../globalScript';
 // Set it here too so getUrl() / the message handlers have a formsUrl when the spec is executed
 // directly through jest; leaves any value already injected untouched.
 Env.formsUrl = Env.formsUrl ?? 'http://localhost:3001/';
+Env.digisignUrl = Env.digisignUrl ?? 'http://localhost:3000/';
 // Run locally with: npx jest ss-container-inline.spec --preset @stencil/core/testing --testRunner jest-jasmine2
 // (the default `stencil test` runner spawns puppeteer, which is blocked in this environment).
 
@@ -159,7 +160,7 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
     let calls = 0;
     const { component } = makeComponent(() => `token-${++calls}`);
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+    component.iframe = () => ({ contentWindow: { postMessage, location: { replace: jest.fn() } }, src: '' });
     await component.handleAuthFailed(); // on the token path, with token-1 in the URL
 
     await component.refreshToken();
@@ -177,7 +178,7 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
     const getToken = jest.fn(() => 'token');
     const { component } = makeComponent(getToken);
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+    component.iframe = () => ({ contentWindow: { postMessage, location: { replace: jest.fn() } }, src: '' });
 
     await component.refreshToken();
 
@@ -198,7 +199,7 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
   it('is a silent no-op when the host configured no getToken', async () => {
     const { component, emitted } = makeComponent(null);
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage } });
+    component.iframe = () => ({ contentWindow: { postMessage, location: { replace: jest.fn() } } });
 
     await component.refreshToken();
     await component.refreshToken();
@@ -237,7 +238,7 @@ describe('ss-container-inline reload', () => {
   it('posts reload to the Forms origin', () => {
     const { component } = makeComponent(null);
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage } });
+    component.iframe = () => ({ contentWindow: { postMessage, location: { replace: jest.fn() } } });
     component.reloadIframe();
     expect(postMessage).toHaveBeenCalledWith('reload', 'http://localhost:3001');
   });
@@ -362,7 +363,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
   function withIframe(component: any) {
     const postMessage = jest.fn();
-    component.iframe = () => ({ contentWindow: { postMessage }, src: '' });
+    component.iframe = () => ({ contentWindow: { postMessage, location: { replace: jest.fn() } }, src: '' });
     return postMessage;
   }
 
@@ -420,7 +421,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
   it('times the first renewal on the session expiry Forms reports after the sign-in reload', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
-    const frame = { postMessage: jest.fn() };
+    const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
     component.iframe = () => ({ contentWindow: frame, src: '' });
     await component.handleAuthFailed();
     // The exchange can hand Forms a cached token that runs out well before the host token.
@@ -488,7 +489,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
   it('stops renewing and tells the host when the user signs out inside Forms', async () => {
     const { component, emitted, iframeEl } = makeComponent(() => jwtExpiringIn(3600));
-    const frame = { postMessage: jest.fn() };
+    const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
     component.iframe = () => ({ contentWindow: frame, get src() { return iframeEl.src; }, set src(v) { iframeEl.src = v; } });
     await component.handleAuthFailed();
     const srcAfterSignIn = iframeEl.src;
@@ -683,10 +684,13 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
   async function onTokenPath() {
     const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
     const postMessage = jest.fn();
-    const iframeEl: any = { src: '', contentWindow: { postMessage } };
+    const replace = jest.fn();
+    const iframeEl: any = { src: '', contentWindow: { postMessage, location: { replace } } };
     component.iframe = () => iframeEl;
     await component.handleAuthFailed();
-    expect(iframeEl.src).toContain('#t=');
+    // The token-carrying load goes through the frame window, so src never holds the token.
+    expect(replace.mock.calls[0][0]).toContain('#t=');
+    expect(iframeEl.src).toBe('');
     postMessage.mockClear();
     return { component, emitted, iframeEl, postMessage };
   }
@@ -699,11 +703,11 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
 
     const clearing = component.clearToken();
     expect(postMessage).toHaveBeenCalledWith({ status: 'forms-clear-token' }, formsOrigin());
-    expect(iframeEl.src).toContain('#t='); // not reloaded before Forms answers
+    expect(iframeEl.src).toBe(''); // not reloaded before Forms answers
     tokenCleared(component);
     await clearing;
 
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
     expect(iframeEl.src.startsWith(Env.formsUrl)).toBe(true);
   });
 
@@ -716,7 +720,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     ackTimer.fn();
     await clearing;
 
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
   it('ignores a forms-token-cleared message from another origin', async () => {
@@ -725,11 +729,11 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     const clearing = component.clearToken();
     tokenCleared(component, 'https://evil.example');
     await Promise.resolve();
-    expect(iframeEl.src).toContain('#t='); // still waiting
+    expect(iframeEl.src).toBe(''); // still waiting
 
     tokenCleared(component);
     await clearing;
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
   it('stops renewing and leaves token mode, so the next cookie wall starts the token path for the next user', async () => {
@@ -745,7 +749,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(component.tokenMode).toBe(false);
     // A second wall is a fresh start, not the "already tried" loop guard.
     await component.handleAuthFailed();
-    expect(iframeEl.src).toContain('#t=');
+    expect(iframeEl.contentWindow.location.replace.mock.calls.at(-1)[0]).toContain('#t='); // the token path started again
     expect(emitted).toEqual([]);
   });
 
@@ -776,7 +780,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(postMessage).not.toHaveBeenCalled(); // no forms-set-token after the sign-out
     expect(component.token).toBeNull();
     expect(component.renewalTimer).toBeNull();
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
   it('drops a fallback reload whose getToken was still running when the host signed out', async () => {
@@ -790,7 +794,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     pending.settle(jwtExpiringIn(3600, 'previous-user'));
     await falling;
 
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
     expect(component.token).toBeNull();
     expect(emitted).toEqual([]); // the host signed out on purpose: no auth error for it
   });
@@ -830,7 +834,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     await navigating;
 
     expect(loads).toBe(1);
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
   it('ignores a forms-token-installed that arrives after the clear', async () => {
@@ -856,7 +860,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
 
     next = jwtExpiringIn(3600);
     await component.handleAuthFailed(); // the next wall, after a reload
-    expect(iframeEl.src).toContain('#t=');
+    expect(iframeEl.src).toContain('#t='); // this frame has no window, so the load uses src
   });
 
   it('ignores a forms-token-cleared from another window on the Forms origin', async () => {
@@ -865,11 +869,11 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     const clearing = component.clearToken();
     tokenCleared(component, formsOrigin(), { postMessage: jest.fn() }); // e.g. a second Forms tab
     await Promise.resolve();
-    expect(iframeEl.src).toContain('#t='); // still waiting on our own frame
+    expect(iframeEl.src).toBe(''); // still waiting on our own frame
 
     tokenCleared(component);
     await clearing;
-    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
   it('joins a clear already in progress instead of starting a second one', async () => {
@@ -893,7 +897,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     tokenCleared(component);
     await clearing;
 
-    expect(iframeEl.src).toContain('#t='); // the old src, untouched
+    expect(iframeEl.src).toBe(''); // the old src, untouched
   });
 
   it('is a no-op for the global API until an inline container registers', async () => {
@@ -907,5 +911,168 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     widget.registerClearToken(clear);
     await widget.clearToken();
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ss-container-inline token loads stay out of the iframe src', () => {
+  afterEach(() => {
+    delete (window as any).skyslope;
+  });
+
+  function withWindow(component: any, iframeEl: { src: string }) {
+    const replace = jest.fn();
+    component.iframe = () => ({
+      contentWindow: { location: { replace }, postMessage: jest.fn() },
+      get src() { return iframeEl.src; },
+      set src(v: string) { iframeEl.src = v; },
+    });
+    return replace;
+  }
+
+  it('loads the token-carrying URL through the frame window, leaving src without the token', async () => {
+    const { component, iframeEl } = makeComponent(() => jwtExpiringIn(3600));
+    iframeEl.src = 'http://localhost:3001/error/cookies';
+    const replace = withWindow(component, iframeEl);
+
+    await component.handleAuthFailed();
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0][0]).toContain('#t=');
+    expect(iframeEl.src).toBe('http://localhost:3001/error/cookies');
+    component.clearRenewalTimer();
+  });
+
+  it('still sets src for a load without a token', async () => {
+    const { component, iframeEl } = makeComponent(null);
+    const replace = withWindow(component, iframeEl);
+
+    await component.navigateTo();
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(iframeEl.src).toContain('http://localhost:3001');
+    expect(iframeEl.src).not.toContain('#t=');
+  });
+});
+
+describe('ss-container-inline DigiSign hand-off', () => {
+  const DS = 'http://localhost:3000';
+  const FORMS = 'http://localhost:3001';
+
+  afterEach(() => {
+    delete (window as any).skyslope;
+  });
+
+  function framed(getToken: GetToken) {
+    const made = makeComponent(getToken);
+    const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
+    made.component.iframe = () => ({ contentWindow: frame, get src() { return made.iframeEl.src; }, set src(v) { made.iframeEl.src = v; } });
+    const fromDigisign = (data: any, source: any = frame) => made.component.handleMessage({ origin: DS, source, data } as any);
+    const fromForms = (data: any) => made.component.handleMessage({ origin: FORMS, source: frame, data } as any);
+    return { ...made, frame, fromDigisign, fromForms };
+  }
+
+  async function settle() {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  }
+
+  it('answers DigiSign with a token posted to its exact origin in a token session', async () => {
+    const { component, frame, fromDigisign } = framed(() => jwtExpiringIn(3600, 'ds'));
+    await component.handleAuthFailed();
+    frame.postMessage.mockClear();
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(frame.postMessage).toHaveBeenCalledTimes(1);
+    const [payload, target] = frame.postMessage.mock.calls[0];
+    expect(payload.status).toBe('digisign-set-token');
+    expect(typeof payload.token).toBe('string');
+    expect(target).toBe(DS);
+    expect(component.renewalTimer).not.toBeNull();
+    component.clearRenewalTimer();
+  });
+
+  it('never sends a token to DigiSign in a cookie session', async () => {
+    const getToken = jest.fn(() => jwtExpiringIn(3600));
+    const { emitted, frame, fromDigisign } = framed(getToken);
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+
+  it('ignores DigiSign messages from another window', async () => {
+    const getToken = jest.fn(() => jwtExpiringIn(3600));
+    const { component, frame, fromDigisign } = framed(getToken);
+    await component.handleAuthFailed();
+    getToken.mockClear();
+    frame.postMessage.mockClear();
+
+    fromDigisign({ status: 'digisign-auth-required' }, { postMessage: jest.fn() });
+    await settle();
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    component.clearRenewalTimer();
+  });
+
+  it('sends renewals to whichever app spoke last', async () => {
+    let n = 0;
+    const { component, frame, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600 + 600 * ++n));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    frame.postMessage.mockClear();
+
+    await component.renewNow(true);
+    expect(frame.postMessage.mock.calls[0][0].status).toBe('digisign-set-token');
+    expect(frame.postMessage.mock.calls[0][1]).toBe(DS);
+
+    fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 });
+    frame.postMessage.mockClear();
+    await component.renewNow(true);
+    expect(frame.postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+    expect(frame.postMessage.mock.calls[0][1]).toBe(FORMS);
+    component.clearRenewalTimer();
+  });
+
+  it('asks DigiSign to clear when it is in the frame, and its answer ends the wait', async () => {
+    const { component, frame, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    frame.postMessage.mockClear();
+
+    const clearing = component.clearToken();
+    await settle();
+    expect(frame.postMessage).toHaveBeenCalledWith({ status: 'digisign-clear-token' }, DS);
+
+    fromDigisign({ status: 'digisign-token-cleared' });
+    await clearing;
+    expect(component.tokenMode).toBe(false);
+  });
+
+  it('re-arms on the expiry DigiSign reports', async () => {
+    const { component, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+
+    fromDigisign({ status: 'digisign-token-installed', ok: true, exp: sessionExp });
+
+    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+    component.clearRenewalTimer();
+  });
+
+  it('tells the host when DigiSign gives up waiting', () => {
+    const { emitted, fromDigisign } = framed(() => jwtExpiringIn(3600));
+
+    fromDigisign({ status: 'digisign-auth-failed' });
+
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
   });
 });

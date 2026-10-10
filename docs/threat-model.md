@@ -46,6 +46,8 @@ flowchart LR
     FRAME -->|Authentication and application workflows| REMOTE[Forms APIs and identity provider]
     FRAME -->|Workflow navigation, externally implemented| SIGN[DigiSign application]
     SIGN -->|Documented signing events, contract unverified here| LISTEN
+    HOST -->|"digisign-set-token and digisign-clear-token to the DigiSign origin (token sessions only)"| SIGN
+    SIGN -->|"digisign-auth-required, -token-installed, -token-cleared, -auth-failed (origin and frame checked)"| HOST
 ```
 
 The principal boundaries are executable distribution into the host origin; host-controlled navigation/configuration into a remote authenticated application; browser same-origin isolation between host and iframe; remote-window messages into host business logic; and development versus production build endpoints. The README's CDN/Argo description is an external distribution claim, not a verified deployment flow.
