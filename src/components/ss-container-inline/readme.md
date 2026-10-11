@@ -5,6 +5,13 @@
 <!-- Auto Generated Below -->
 
 
+## Events
+
+| Event       | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Type                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `authError` | Emitted when authentication cannot be established or kept for the embedded Forms app, so the host page can react (e.g. re-authenticate the user) instead of the iframe silently dead-ending. reason is 'token-callback-failed' when the host getToken callback throws or times out, 'iframe-auth-failed' when the Forms app reports its own auth failure from inside the iframe, 'token-renewal-failed' when a renewal could not be completed before the current token ran out, and 'signed-out' when the user signed out inside Forms during a token session. | `CustomEvent<{ reason: WidgetAuthErrorReason; error?: unknown; }>` |
+
+
 ## Dependencies
 
 ### Used by

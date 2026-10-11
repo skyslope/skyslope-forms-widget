@@ -99,6 +99,105 @@ If you are not using SSO, you can initialize the widget without an IDP:
 </script>
 ```
 
+### Safari and cookie-free authentication (`getToken`)
+
+By default the embedded Forms app signs the user in using cookies. Safari (and other
+browsers with third-party cookies disabled) blocks cookies inside the widget's iframe, so
+the user cannot sign in and sees a "third-party cookies are disabled" message.
+
+To support these browsers, pass a `getToken` callback. The widget uses it only as a **fallback**:
+the Forms app first loads normally with cookies, and the token is fetched and used **only if the
+app reports that it could not authenticate** (e.g. Safari's third-party-cookie wall). When that
+happens, the widget reloads the iframe with the token in the URL fragment and the app
+authenticates without cookies. Browsers where cookie login works never trigger the fallback and
+never receive a token, so their existing experience is unchanged. `getToken` may be synchronous or
+return a promise; return `null` if no token is available (the widget then surfaces the auth
+failure rather than signing the user in).
+
+```javascript
+window.skyslope.widget.initialize({
+  // Return a SkySlope access token for the currently signed-in user.
+  getToken: async () => await myApp.getSkySlopeAccessToken(),
+});
+```
+
+Once the token fallback is active, the token is re-fetched from `getToken` on every navigation, so
+a navigation later in the session carries a fresh token. To renew a long-lived session without navigating or reloading,
+call `window.skyslope.widget.refreshToken()` when your token rotates: the widget fetches a
+fresh token from `getToken` and hands it to the Forms app via `postMessage` (targeted at the
+Forms origin, so the token stays out of the iframe URL). This requires a Forms version that
+accepts the token handoff; on older versions it is a safe no-op and the token still refreshes
+on navigation.
+
+The Forms app hands the user off to DigiSign (the envelope builder) by moving the iframe to
+DigiSign. When the fallback is active, DigiSign cannot sign in by cookie either, so it asks the
+widget for a token; the widget calls `getToken` and hands the token to DigiSign the same way, and
+renewals and `clearToken()` then go to whichever app is in the frame. This needs a DigiSign version
+that accepts the token handoff. Browsers where cookie sign-in works never take this path.
+
+When your user signs out or you switch to a different user, call
+`await window.skyslope.widget.clearToken()` while the widget is still mounted. The Forms app keeps
+the session it built from your token in its own tab storage, so without this it can outlast your
+sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal,
+asks the Forms app to drop that session, and reloads the iframe without a token; it resolves once
+the reload has started. If the Forms version in use does not confirm within 3 seconds, the widget
+reloads anyway. If DigiSign is in the iframe at the time, `clearToken()` asks DigiSign to drop its
+session, then loads Forms with an instruction to drop the session it still keeps, and resolves once
+that load has finished (again within about 3 seconds).
+
+Order matters. In browsers that block third-party cookies, the reload after `clearToken()` hits the
+same cookie wall and the widget calls `getToken` again. Sign the user out of your app first, so
+`getToken` returns `null`, then call `clearToken()`, and only then unmount the widget or leave the
+page. If `getToken` still returns the old user's token when the reload asks for one, that user is
+signed straight back in. For a user switch, switch your app to the new user first; the reload then
+signs in the new user. After a sign-out, that reload finds no token and raises an `authError`
+(`iframe-auth-failed`), which you can ignore while nobody is signed in.
+
+```javascript
+async function signOut() {
+  await myApp.signOut(); // from here getToken returns null
+  await window.skyslope.widget.clearToken(); // the widget must still be mounted
+  myApp.showSignedOutPage();
+}
+```
+
+When the widget's container leaves the page, the widget resets: `window.skyslope.widget` is
+replaced and every setting passed to `initialize()`, including `getToken`, is dropped. This also
+happens when `closeModal()` closes the modal. So call `initialize()` again before each
+`openModal()` and each time you add `ss-container-inline` to the page. Calling it again is safe; it
+sets the same values. Always reach the widget through `window.skyslope.widget` rather than a saved
+reference, because a saved reference points at the old widget after a reset and its calls do
+nothing. If `getToken` is missing after a reset, browsers that block third-party cookies cannot
+sign in and the widget emits `authError` (`iframe-auth-failed`); browsers where cookie sign-in
+works are not affected, so test a second open in Safari.
+
+```javascript
+function openForms() {
+  window.skyslope.widget.initialize({ getToken: myApp.getSkySlopeAccessToken });
+  window.skyslope.widget.openModal();
+}
+```
+
+If authentication cannot be established or kept — `getToken` throws or returns nothing, the
+embedded Forms app reports its own auth failure from inside the iframe, or a renewal fails twice
+before the token runs out — the widget emits an `authError` event
+on the container element so the host page can react (for example, by re-authenticating the user)
+instead of the iframe silently failing. The event is fired by `ss-container-inline` and bubbles out
+of `ss-container-modal`, so `addEventListener` works on either element; in typed JSX, `onAuthError`
+is declared on `ss-container-inline`. One failure can raise two events: when `getToken` throws or
+times out during the fallback, the widget emits `token-callback-failed` with the error, then
+`iframe-auth-failed` because no token could be handed over. `signed-out` means the user signed out
+inside the Forms app during a token session: Forms has dropped its session and the widget has
+stopped renewing, so sign the user out of your app or close the widget.
+
+```javascript
+document.querySelector('ss-container-modal')
+  .addEventListener('authError', event => {
+    // event.detail.reason is 'token-callback-failed', 'iframe-auth-failed', 'token-renewal-failed' or 'signed-out'
+    console.warn('Forms widget auth failed:', event.detail.reason);
+  });
+```
+
 ## Usage with Modal
 
 A pre-made modal is available for use with the widget. To open the modal, call the openModal function:

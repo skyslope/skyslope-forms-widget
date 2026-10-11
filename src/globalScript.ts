@@ -3,6 +3,19 @@
 import { ModalProps, SkyslopeConfig } from './window';
 import { SkyslopePaths } from './components/ss-container-inline/types';
 
+export type GetTokenCallback = () => string | null | Promise<string | null>;
+
+// The host's token callback is kept in module scope, NOT as a property of the widget the page
+// can reach. Script running on the host page could already get at the host's own token, so
+// this grants nobody a new capability - but it avoids handing every site that embeds us the
+// same well-known global to call, which is what would make a generic payload worth writing.
+let storedGetToken: GetTokenCallback | null = null;
+
+// Read by the inline container. Not exposed on window.skyslope.widget.
+export function readGetToken(): GetTokenCallback | null {
+  return storedGetToken;
+}
+
 export class SkySlopeWidget {
   private _path: string;
   private _idp: string | null;
@@ -10,15 +23,18 @@ export class SkySlopeWidget {
   private _headerVariant: string | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
+  private _refreshCallback: () => void;
+  private _clearTokenCallback: () => Promise<void>;
 
   constructor() {
     this._path = '';
   }
 
-  initialize = ({ idp, openInline, headerVariant }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null }) => {
+  initialize = ({ idp, openInline, headerVariant, getToken }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null, getToken: null }) => {
     this._idp = idp ?? null;
     this._openInline = openInline ?? false;
     this._headerVariant = headerVariant ?? null;
+    storedGetToken = getToken ?? null;
   };
 
   openModal = (
@@ -57,6 +73,18 @@ export class SkySlopeWidget {
   reload = () => {
     this._reloadCallback?.();
   };
+  // Push a fresh token to the embedded Forms app (via postMessage, not the URL) so it can
+  // renew a sessionless session without reloading the iframe. Hosts call this when their
+  // token rotates; it is a no-op until an inline container is mounted.
+  refreshToken = () => {
+    this._refreshCallback?.();
+  };
+  // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
+  // switches users. Resolves once the frame has been reloaded without a token. A no-op until an
+  // inline container is mounted.
+  clearToken = async (): Promise<void> => {
+    await this._clearTokenCallback?.();
+  };
   navigateToCreateTransaction = () => this.navigateTo(SkyslopePaths.CreateTransaction);
   navigateToCreateListing = () => this.navigateTo(SkyslopePaths.CreateListing);
   navigateToBrowseLibraries = () => this.navigateTo(SkyslopePaths.BrowseLibraries);
@@ -78,6 +106,20 @@ export class SkySlopeWidget {
     this._navigateCallback = navigateCallback;
   };
 
+  registerRefresh = (refreshCallback: () => void) => {
+    if (this._refreshCallback) {
+      throw new Error('Refresh Callback is already defined. Is more than one inline container running?');
+    }
+    this._refreshCallback = refreshCallback;
+  };
+
+  registerClearToken = (clearTokenCallback: () => Promise<void>) => {
+    if (this._clearTokenCallback) {
+      throw new Error('Clear Token Callback is already defined. Is more than one inline container running?');
+    }
+    this._clearTokenCallback = clearTokenCallback;
+  };
+
   get openInline(): boolean {
     return this._openInline;
   }
@@ -96,6 +138,7 @@ export class SkySlopeWidget {
 }
 
 export default function () {
+  storedGetToken = null;
   if (!window.skyslope) window.skyslope = {};
   const onLoad = window.skyslope?.onLoad;
   window.skyslope.widget = new SkySlopeWidget();

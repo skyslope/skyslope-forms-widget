@@ -5,6 +5,8 @@
  * It contains typing information for all components that exist in this project.
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
+import { WidgetAuthErrorReason } from "./components/ss-container-inline/ss-container-inline";
+export { WidgetAuthErrorReason } from "./components/ss-container-inline/ss-container-inline";
 export namespace Components {
     interface SsButtonBrowseLibraries {
         "unstyled": boolean;
@@ -63,6 +65,10 @@ export namespace Components {
     }
     interface SsIconButton {
     }
+}
+export interface SsContainerInlineCustomEvent<T> extends CustomEvent<T> {
+    detail: T;
+    target: HTMLSsContainerInlineElement;
 }
 export interface SsContainerModalCustomEvent<T> extends CustomEvent<T> {
     detail: T;
@@ -154,6 +160,10 @@ declare namespace LocalJSX {
     interface SsContainedWidget {
     }
     interface SsContainerInline {
+        /**
+          * Emitted when authentication cannot be established or kept for the embedded Forms app, so the host page can react (e.g. re-authenticate the user) instead of the iframe silently dead-ending. reason is 'token-callback-failed' when the host getToken callback throws or times out, 'iframe-auth-failed' when the Forms app reports its own auth failure from inside the iframe, 'token-renewal-failed' when a renewal could not be completed before the current token ran out, and 'signed-out' when the user signed out inside Forms during a token session.
+         */
+        "onAuthError"?: (event: SsContainerInlineCustomEvent<{ reason: WidgetAuthErrorReason; error?: unknown }>) => void;
     }
     interface SsContainerModal {
         /**
