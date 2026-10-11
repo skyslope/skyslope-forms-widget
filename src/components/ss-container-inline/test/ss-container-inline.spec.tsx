@@ -563,17 +563,43 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewNow()).not.toBe(stuck);
   });
 
-  it('treats a host that hands back a no-later token as a failed renewal', async () => {
-    // Same lifetime every call: a cached, near-dead token.
-    const { component } = makeComponent(() => jwtExpiringIn(3600));
+  it('still renews when a host that caches its token hands back the same one', async () => {
+    // Inside the renewal window the exchange turns the same partner token into a fresh session
+    // token, so the host token is not judged. Forms' answer is.
+    const cached = jwtExpiringIn(3600);
+    const { component, emitted } = makeComponent(() => cached);
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+    postMessage.mockClear();
+    emitted.length = 0;
+
+    await component.renewNow();
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0]).toEqual({ status: 'forms-set-token', token: cached });
+
+    // Forms reports the fresh session token's later expiry: renewed, re-armed on it.
+    component.handleTokenInstalled({ ok: true, exp: sessionExp + 3600 });
+    expect(emitted).toEqual([]);
+    expectDelayNear(renewalDelay(component), (1800 + 3600) * 1000 - 3 * 60_000);
+    component.clearRenewalTimer();
+  });
+
+  it('waits at least a retry interval after renewing with a host token already inside the lead window', async () => {
+    // A cached host token with a minute left must not re-arm at zero delay and spin while Forms answers.
+    const nearDead = jwtExpiringIn(60);
+    const { component } = makeComponent(() => nearDead);
     const postMessage = withIframe(component);
     await component.handleAuthFailed();
     postMessage.mockClear();
 
     await component.renewNow();
 
-    expect(postMessage).not.toHaveBeenCalled(); // never pushed to Forms
-    expect(renewalDelay(component)).toBe(30_000); // backed off to a retry, not re-armed tight
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(renewalDelay(component)).toBe(30_000);
+    component.clearRenewalTimer();
   });
 
   it('treats an install that does not move the session expiry as a failed renewal', async () => {
@@ -615,8 +641,8 @@ describe('ss-container-inline renewal scheduling', () => {
   });
 
   it('accepts a renewal whose host token outlives the last one sent, even if the session runs longer', async () => {
-    // After an exchange the session's token can outlive the host's. The staleness check compares
-    // host tokens with each other, so a fresh host token is not mistaken for a stale one.
+    // After an exchange the session's token can outlive the host's. A host token that expires
+    // before the session is still handed over; Forms' answer decides whether it renewed anything.
     let next = jwtExpiringIn(3600, 'first');
     const { component } = makeComponent(() => next);
     const postMessage = withIframe(component);

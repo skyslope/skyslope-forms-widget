@@ -76,8 +76,10 @@ const GET_TOKEN_TIMEOUT_MS = 30 * 1000;
 // so wait a little and try once more before telling the host.
 const RENEWAL_RETRY_MS = 30 * 1000;
 
-// A replacement token has to outlive the one it replaces by at least this much. A host that
-// hands back the same near-dead token from a cache would otherwise put us in a tight loop.
+// A renewal has to move the session's expiry, as Forms (or DigiSign) reports it back, by at least
+// this much. An unchanged expiry would otherwise re-arm at zero delay and spin. Only the app's
+// answer is judged, never the host token: a host that caches its token hands back the same one,
+// and the exchange still turns it into a fresh session token inside the renewal window.
 const MIN_EXPIRY_GAIN_MS = 60 * 1000;
 
 export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-failed' | 'token-renewal-failed' | 'signed-out';
@@ -129,10 +131,6 @@ export class SsContainerInline {
   // from one renewal to the next.
   private lastReportedExpiry: number | null = null;
 
-  // The expiry of the last host token we sent. A new host token is checked against this, not
-  // against the session's expiry, which after an exchange can differ from any host token.
-  private lastSentExpiry: number | null = null;
-
   // Resolves the wait in clearToken() when Forms confirms the clear. Null when no clear is waiting.
   private clearAck: (() => void) | null = null;
 
@@ -173,18 +171,20 @@ export class SsContainerInline {
   }
 
   // Arm the next renewal. An undecodable token simply gets no timer — we would be guessing.
-  private scheduleRenewal(expiresAt: number | null): void {
+  // minDelayMs keeps the next attempt at least that far out, even for a token already inside the
+  // lead window.
+  private scheduleRenewal(expiresAt: number | null, minDelayMs = 0): void {
     this.clearRenewalTimer();
     this.expiresAt = expiresAt;
     if (expiresAt == null) return;
 
     const lifetime = expiresAt - Date.now();
-    if (lifetime <= 0) {
+    if (lifetime <= 0 && minDelayMs === 0) {
       void this.renewNow();
       return;
     }
     // A token with less life left than the lead is already inside the window, so go now.
-    const delay = Math.max(0, lifetime - RENEWAL_LEAD_MS);
+    const delay = Math.max(minDelayMs, lifetime - RENEWAL_LEAD_MS);
     this.renewalTimer = setTimeout(() => {
       void this.renewNow();
     }, delay);
@@ -223,19 +223,18 @@ export class SsContainerInline {
     }
   }
 
-  // Fetch a fresh token and hand it to the Forms app in place. `force` is used by the host's
-  // own refreshToken() call, where an early rotation is intentional and the staleness check
-  // would only get in the way.
-  private renewNow = (force = false): Promise<void> => {
+  // Fetch a fresh token and hand it to the app in the frame in place. Whether it bought more time
+  // is judged on the app's answer (handleTokenInstalled), not on the host token.
+  private renewNow = (): Promise<void> => {
     if (this.renewing != null) return this.renewing;
-    const renewal = this.runRenewal(force).finally(() => {
+    const renewal = this.runRenewal().finally(() => {
       if (this.renewing === renewal) this.renewing = null;
     });
     this.renewing = renewal;
     return renewal;
   };
 
-  private runRenewal = async (force: boolean): Promise<void> => {
+  private runRenewal = async (): Promise<void> => {
     // No token path configured - a cookie-based host, or the native web view. There is
     // nothing to renew and nothing has gone wrong, so this is a silent no-op: no retry
     // timer, no authError. Only the token path can fail to renew.
@@ -244,7 +243,6 @@ export class SsContainerInline {
     // sessionless session, and browsers whose cookies work must never receive a token.
     if (!this.tokenMode) return;
 
-    const previousExpiry = this.lastSentExpiry;
     const generation = this.clearGeneration;
     await this.resolveToken();
     if (generation !== this.clearGeneration) return;
@@ -254,17 +252,12 @@ export class SsContainerInline {
     }
 
     const nextExpiry = this.decodeExpiry(this.token);
-    if (!force && previousExpiry != null && nextExpiry != null && nextExpiry - previousExpiry < MIN_EXPIRY_GAIN_MS) {
-      // The host handed back something that expires no later than what we already had.
-      this.handleRenewalFailure();
-      return;
-    }
-
     this.postTokenToFrame(this.token);
-    this.lastSentExpiry = nextExpiry;
     // Arm on what we can see for now. Forms answers with the expiry of the token the session
-    // actually ended up using — after an exchange that can differ — and we re-arm on that.
-    this.scheduleRenewal(nextExpiry);
+    // actually ended up using — after an exchange that can differ — and we re-arm on that. A host
+    // that caches its token can hand back one that is itself inside the lead window, so wait at
+    // least a retry interval rather than renewing again at once while Forms answers.
+    this.scheduleRenewal(nextExpiry, RENEWAL_RETRY_MS);
   };
 
   private handleRenewalFailure(): void {
@@ -420,7 +413,7 @@ export class SsContainerInline {
   // where its own token rotates early (an account switch, say) — the normal five-minute
   // renewal is driven by our own timer and needs nothing from the host.
   private refreshToken = async () => {
-    await this.renewNow(true);
+    await this.renewNow();
   };
 
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
@@ -477,7 +470,6 @@ export class SsContainerInline {
     this.token = null;
     this.expiresAt = null;
     this.lastReportedExpiry = null;
-    this.lastSentExpiry = null;
     this.renewalRetryUsed = false;
     // Leave token mode so the next cookie wall can start the token path again, for the next user.
     this.tokenMode = false;
@@ -534,8 +526,7 @@ export class SsContainerInline {
     this.lastReportedExpiry = null;
     this.renewalRetryUsed = false;
     this.postTokenToDigisign(this.token);
-    this.lastSentExpiry = this.decodeExpiry(this.token);
-    this.scheduleRenewal(this.lastSentExpiry);
+    this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
   // The user signed out inside Forms, which already dropped its session. Stop renewing, and leave
@@ -639,9 +630,8 @@ export class SsContainerInline {
       return;
     }
     if (!this.loadFrame()) return;
-    this.lastSentExpiry = this.decodeExpiry(this.token);
     // From here the session lives on a token with a finite life, so start watching it.
-    this.scheduleRenewal(this.lastSentExpiry);
+    this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
   connectedCallback() {
