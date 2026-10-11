@@ -53,6 +53,10 @@ type FrameApp = 'forms' | 'digisign';
 // Forms never answers, and the host should not wait long on its own sign-out.
 const CLEAR_ACK_TIMEOUT_MS = 3 * 1000;
 
+// Fragment that tells Forms to drop the session stored in this frame as it starts. Used after a
+// clear that went to DigiSign, which cannot reach the Forms session it was handed off from.
+const FORMS_CLEAR_FRAGMENT = 'forms-clear=1';
+
 // Ask the host for a fresh token this long before the current one expires.
 //
 // This has to land inside a specific window, and renewing EARLIER is not safer — it is useless.
@@ -91,8 +95,9 @@ export class SsContainerInline {
    * the host page can react (e.g. re-authenticate the user) instead of the iframe silently
    * dead-ending. reason is 'token-callback-failed' when the host getToken callback throws or
    * times out, 'iframe-auth-failed' when the Forms app reports its own auth failure from
-   * inside the iframe, and 'token-renewal-failed' when a renewal could not be completed
-   * before the current token ran out.
+   * inside the iframe, 'token-renewal-failed' when a renewal could not be completed
+   * before the current token ran out, and 'signed-out' when the user signed out inside Forms
+   * during a token session.
    */
   @Event({ bubbles: true, composed: true }) authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
@@ -341,7 +346,7 @@ export class SsContainerInline {
     return urlObj.toString();
   }
 
-  private getUrl(): string {
+  private getUrl(clearForms = false): string {
     const { widget } = window.skyslope ?? {};
     if (widget == null) return '';
 
@@ -368,7 +373,8 @@ export class SsContainerInline {
 
     // Pass the token in the URL fragment (not a query param): fragments are not sent to
     // the server, and the Forms app strips it from history immediately on read.
-    return this.token != null ? `${url}#t=${encodeURIComponent(this.token)}` : url;
+    if (this.token != null) return `${url}#t=${encodeURIComponent(this.token)}`;
+    return clearForms ? `${url}#${FORMS_CLEAR_FRAGMENT}` : url;
   }
 
   private iframe = () => this.el.shadowRoot?.getElementById('ss-container-iframe') as HTMLIFrameElement | null;
@@ -385,9 +391,9 @@ export class SsContainerInline {
 
   // Point the frame at the current Forms URL. Does nothing before the frame renders or before
   // the host has set up window.skyslope, rather than loading an empty src.
-  private loadFrame(): boolean {
+  private loadFrame(clearForms = false): boolean {
     const iframe = this.iframe();
-    const url = this.getUrl();
+    const url = this.getUrl(clearForms);
     if (iframe == null || url === '') return false;
     // A URL that carries a token is loaded by navigating the frame's own window. The src attribute
     // stays in the host page's DOM for the whole session, where other scripts and session-replay
@@ -430,12 +436,37 @@ export class SsContainerInline {
   private runClear = async (): Promise<void> => {
     const generation = this.forgetToken();
 
-    await this.askFormsToClear();
+    const askedApp = await this.askFrameToClear();
     // Unmounted while waiting: there is no frame left to reload.
     if (generation !== this.clearGeneration) return;
+    if (askedApp === 'digisign') {
+      // DigiSign dropped its own session, but the Forms session it was handed off from is still
+      // stored in this frame and would sign the old user back in. Load Forms with the fragment
+      // that makes it drop that session as it starts, and wait for that load, so the host's own
+      // reload after clearToken() cannot cut it short.
+      this.frameApp = 'forms';
+      const iframe = this.iframe();
+      const loaded = iframe != null ? this.waitForFrameLoad(iframe) : Promise.resolve();
+      this.loadFrame(true);
+      await loaded;
+      return;
+    }
     // Reload without a token. Anything still running in the old page goes away with it.
     this.loadFrame();
   };
+
+  // Resolves when the frame finishes its next load, or after CLEAR_ACK_TIMEOUT_MS. Never rejects.
+  private waitForFrameLoad(iframe: HTMLIFrameElement): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        clearTimeout(timer);
+        iframe.removeEventListener('load', done);
+        resolve();
+      };
+      const timer = setTimeout(done, CLEAR_ACK_TIMEOUT_MS);
+      iframe.addEventListener('load', done);
+    });
+  }
 
   // Stop renewing and forget the token, so nothing sends it again. Bumping clearGeneration makes
   // token work that is still waiting on the host stand down.
@@ -497,6 +528,11 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
+    // DigiSign's answer is a first sign-in, not a renewal: it reports the expiry of its session
+    // token, which can match one reported before (the exchange caches one token per user). Let
+    // that answer set the baseline instead of being judged as a renewal that gained nothing.
+    this.lastReportedExpiry = null;
+    this.renewalRetryUsed = false;
     this.postTokenToDigisign(this.token);
     this.lastSentExpiry = this.decodeExpiry(this.token);
     this.scheduleRenewal(this.lastSentExpiry);
@@ -510,14 +546,16 @@ export class SsContainerInline {
     this.authError.emit({ reason: 'signed-out' });
   }
 
-  // Post forms-clear-token to the exact Forms origin and wait for forms-token-cleared, or give up after a
-  // short timeout. Never rejects.
-  private askFormsToClear(): Promise<void> {
+  // Ask whichever app is in the frame to clear its session (forms-clear-token or
+  // digisign-clear-token, to that app's exact origin) and wait for its answer, or give up after a
+  // short timeout. Resolves with the app that was asked. Never rejects.
+  private askFrameToClear(): Promise<FrameApp> {
+    const askedApp = this.frameApp;
     return new Promise(resolve => {
       const done = () => {
         clearTimeout(timer);
         this.clearAck = null;
-        resolve();
+        resolve(askedApp);
       };
       const timer = setTimeout(done, CLEAR_ACK_TIMEOUT_MS);
       this.clearAck = done;
@@ -527,7 +565,7 @@ export class SsContainerInline {
         return;
       }
       // If DigiSign is in the frame, it holds the session to clear.
-      if (this.frameApp === 'digisign') target.postMessage({ status: DIGISIGN_CLEAR_TOKEN }, this.digisignOrigin());
+      if (askedApp === 'digisign') target.postMessage({ status: DIGISIGN_CLEAR_TOKEN }, this.digisignOrigin());
       else target.postMessage({ status: FORMS_CLEAR_TOKEN }, this.formsOrigin());
     });
   }

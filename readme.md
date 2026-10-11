@@ -141,7 +141,9 @@ the session it built from your token in its own tab storage, so without this it 
 sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal,
 asks the Forms app to drop that session, and reloads the iframe without a token; it resolves once
 the reload has started. If the Forms version in use does not confirm within 3 seconds, the widget
-reloads anyway.
+reloads anyway. If DigiSign is in the iframe at the time, `clearToken()` asks DigiSign to drop its
+session, then loads Forms with an instruction to drop the session it still keeps, and resolves once
+that load has finished (again within about 3 seconds).
 
 Order matters. In browsers that block third-party cookies, the reload after `clearToken()` hits the
 same cookie wall and the widget calls `getToken` again. Sign the user out of your app first, so

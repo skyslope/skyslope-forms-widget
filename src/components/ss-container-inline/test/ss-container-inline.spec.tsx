@@ -965,10 +965,20 @@ describe('ss-container-inline DigiSign hand-off', () => {
   function framed(getToken: GetToken) {
     const made = makeComponent(getToken);
     const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
-    made.component.iframe = () => ({ contentWindow: frame, get src() { return made.iframeEl.src; }, set src(v) { made.iframeEl.src = v; } });
+    const loadListeners = new Set<() => void>();
+    const iframe = {
+      contentWindow: frame,
+      get src() { return made.iframeEl.src; },
+      set src(v) { made.iframeEl.src = v; },
+      addEventListener: (_type: string, fn: () => void) => loadListeners.add(fn),
+      removeEventListener: (_type: string, fn: () => void) => loadListeners.delete(fn),
+    };
+    made.component.iframe = () => iframe;
+    // Fires the frame's load event, as the browser does when the new page has loaded.
+    const frameLoaded = () => [...loadListeners].forEach(fn => fn());
     const fromDigisign = (data: any, source: any = frame) => made.component.handleMessage({ origin: DS, source, data } as any);
     const fromForms = (data: any) => made.component.handleMessage({ origin: FORMS, source: frame, data } as any);
-    return { ...made, frame, fromDigisign, fromForms };
+    return { ...made, frame, fromDigisign, fromForms, frameLoaded };
   }
 
   async function settle() {
@@ -1039,20 +1049,65 @@ describe('ss-container-inline DigiSign hand-off', () => {
     component.clearRenewalTimer();
   });
 
-  it('asks DigiSign to clear when it is in the frame, and its answer ends the wait', async () => {
-    const { component, frame, fromDigisign } = framed(() => jwtExpiringIn(3600));
+  it('asks DigiSign to clear when it is in the frame, then has Forms drop its session too', async () => {
+    const { component, frame, fromDigisign, frameLoaded, iframeEl } = framed(() => jwtExpiringIn(3600));
     await component.handleAuthFailed();
     fromDigisign({ status: 'digisign-auth-required' });
     await settle();
     frame.postMessage.mockClear();
+    let cleared = false;
 
-    const clearing = component.clearToken();
+    const clearing = component.clearToken().then(() => {
+      cleared = true;
+    });
     await settle();
     expect(frame.postMessage).toHaveBeenCalledWith({ status: 'digisign-clear-token' }, DS);
 
     fromDigisign({ status: 'digisign-token-cleared' });
+    await settle();
+    // The Forms session DigiSign was handed off from is still in the frame: Forms is loaded with
+    // the fragment that drops it, without a token, and the clear waits for that load.
+    expect(iframeEl.src.startsWith(FORMS)).toBe(true);
+    expect(iframeEl.src.endsWith('#forms-clear=1')).toBe(true);
+    expect(iframeEl.src).not.toContain('#t=');
+    expect(cleared).toBe(false);
+
+    frameLoaded();
     await clearing;
     expect(component.tokenMode).toBe(false);
+    expect(component.frameApp).toBe('forms');
+  });
+
+  it('does not add the Forms clear fragment when Forms itself was asked to clear', async () => {
+    const { component, frame, fromForms, iframeEl } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    frame.postMessage.mockClear();
+
+    const clearing = component.clearToken();
+    await settle();
+    expect(frame.postMessage).toHaveBeenCalledWith({ status: 'forms-clear-token' }, FORMS);
+    fromForms({ status: 'forms-token-cleared' });
+    await clearing;
+
+    expect(iframeEl.src).not.toContain('forms-clear');
+  });
+
+  it('treats each DigiSign sign-in as a new baseline, not a renewal that gained nothing', async () => {
+    const { component, emitted, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    // DigiSign's session token comes from the exchange's cache, so every load reports the same expiry.
+    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+
+    for (let load = 0; load < 3; load++) {
+      fromDigisign({ status: 'digisign-auth-required' });
+      await settle();
+      fromDigisign({ status: 'digisign-token-installed', ok: true, exp: sessionExp });
+    }
+
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(emitted).toEqual([]);
+    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+    component.clearRenewalTimer();
   });
 
   it('re-arms on the expiry DigiSign reports', async () => {
