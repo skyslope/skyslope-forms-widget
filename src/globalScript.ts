@@ -73,15 +73,15 @@ export class SkySlopeWidget {
   reload = () => {
     this._reloadCallback?.();
   };
-  // Push a fresh token to the embedded Forms app (via postMessage, not the URL) so it can
-  // renew a sessionless session without reloading the iframe. Hosts call this when their
-  // token rotates; it is a no-op until an inline container is mounted.
+  // Push a fresh token to the app in the frame (Forms, or DigiSign when it is there) by postMessage,
+  // not the URL, so it renews in place without a reload. Hosts call this when their token rotates.
+  // Does nothing until an inline container is mounted, or on the cookie path.
   refreshToken = () => {
     this._refreshCallback?.();
   };
   // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
-  // switches users. Resolves once the frame has been reloaded without a token. A no-op until an
-  // inline container is mounted.
+  // switches users. Resolves once the frame's reload without a token has started (after a DigiSign
+  // clear, once Forms has loaded). A no-op until an inline container is mounted.
   clearToken = async (): Promise<void> => {
     await this._clearTokenCallback?.();
   };

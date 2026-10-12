@@ -325,7 +325,7 @@ describe('ss-container-inline token expiry decoding', () => {
 });
 
 describe('ss-container-inline renewal scheduling', () => {
-  // resolveToken also arms a timer (the getToken deadline), so a flat list of delays cannot
+  // fetchHostToken also arms a timer (the getToken deadline), so a flat list of delays cannot
   // tell us which one is the renewal. Hand out an id per call and look up the one the
   // component actually kept as its renewal timer.
   let timers: Array<{ id: number; ms: number }>;
@@ -472,7 +472,7 @@ describe('ss-container-inline renewal scheduling', () => {
     component.handleSessionExpiry({ exp: Math.floor(Date.now() / 1000) + 1200 });
 
     expect(component.renewalTimer).toBeNull();
-    expect(component.lastReportedExpiry).toBeNull();
+    expect(component.lastInstalledExpiry).toBeNull();
   });
 
   it('ignores a session expiry that is not a number', async () => {
@@ -484,7 +484,7 @@ describe('ss-container-inline renewal scheduling', () => {
     component.handleSessionExpiry({ exp: 'soon' });
 
     expect(renewalDelay(component)).toBe(before);
-    expect(component.lastReportedExpiry).toBeNull();
+    expect(component.lastInstalledExpiry).toBeNull();
   });
 
   it('stops renewing and tells the host when the user signs out inside Forms', async () => {
@@ -603,9 +603,8 @@ describe('ss-container-inline renewal scheduling', () => {
   });
 
   it('treats an install that does not move the session expiry as a failed renewal', async () => {
-    // The token exchange hands back the same internal token for a user for its whole life, so a
-    // renewal can report success while buying no extra time. Re-arming on that expiry would
-    // schedule the next attempt at zero delay and spin.
+    // A renewal can report success while buying no extra time (a token asked for too early, before
+    // the exchange's cache lets go of it). Re-arming on that expiry would retry at once and spin.
     const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);
     await component.handleAuthFailed();
@@ -640,7 +639,7 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
   });
 
-  it('accepts a renewal whose host token outlives the last one sent, even if the session runs longer', async () => {
+  it('still sends a host token that expires before the session', async () => {
     // After an exchange the session's token can outlive the host's. A host token that expires
     // before the session is still handed over; Forms' answer decides whether it renewed anything.
     let next = jwtExpiringIn(3600, 'first');
@@ -665,7 +664,7 @@ describe('ss-container-inline renewal scheduling', () => {
     stubWidget(() => new Promise<string>((resolve) => (settle = resolve)));
     postMessage.mockClear();
 
-    const renewing = component.renewNow(true);
+    const renewing = component.renewNow();
     component.disconnectedCallback();
     settle(jwtExpiringIn(7200));
     await renewing;
@@ -797,7 +796,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     const pending = deferredGetToken();
     stubWidget(pending.getToken);
 
-    const renewing = component.renewNow(true);
+    const renewing = component.renewNow();
     await clearWithAck(component);
     postMessage.mockClear();
     pending.settle(jwtExpiringIn(3600, 'previous-user'));
@@ -1063,13 +1062,13 @@ describe('ss-container-inline DigiSign hand-off', () => {
     await settle();
     frame.postMessage.mockClear();
 
-    await component.renewNow(true);
+    await component.renewNow();
     expect(frame.postMessage.mock.calls[0][0].status).toBe('digisign-set-token');
     expect(frame.postMessage.mock.calls[0][1]).toBe(DS);
 
     fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 });
     frame.postMessage.mockClear();
-    await component.renewNow(true);
+    await component.renewNow();
     expect(frame.postMessage.mock.calls[0][0].status).toBe('forms-set-token');
     expect(frame.postMessage.mock.calls[0][1]).toBe(FORMS);
     component.clearRenewalTimer();
@@ -1132,7 +1131,7 @@ describe('ss-container-inline DigiSign hand-off', () => {
 
     expect(component.renewalRetryUsed).toBe(false);
     expect(emitted).toEqual([]);
-    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+    expect(component.lastInstalledExpiry).toBe(sessionExp * 1000);
     component.clearRenewalTimer();
   });
 
@@ -1145,8 +1144,20 @@ describe('ss-container-inline DigiSign hand-off', () => {
 
     fromDigisign({ status: 'digisign-token-installed', ok: true, exp: sessionExp });
 
-    expect(component.lastReportedExpiry).toBe(sessionExp * 1000);
+    expect(component.lastInstalledExpiry).toBe(sessionExp * 1000);
     component.clearRenewalTimer();
+  });
+
+  it('does not let DigiSign send Forms statuses', async () => {
+    const getToken = jest.fn(() => jwtExpiringIn(3600));
+    const { component, emitted, fromDigisign } = framed(getToken);
+
+    fromDigisign({ status: 'forms-auth-failed' });
+    await settle();
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(component.tokenMode).toBe(false);
+    expect(emitted).toEqual([]);
   });
 
   it('tells the host when DigiSign gives up waiting', () => {
