@@ -226,7 +226,11 @@ export class SsContainerInline {
 
   private async fetchHostToken(): Promise<void> {
     const getToken = readGetToken();
-    if (getToken == null) return;
+    if (getToken == null) {
+      // The host dropped getToken (initialize() again without it). Never carry the old token on.
+      this.token = null;
+      return;
+    }
     const generation = this.sessionGeneration;
     try {
       const token = await this.withGetTokenTimeout(Promise.resolve(getToken()));

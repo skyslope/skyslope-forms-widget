@@ -143,6 +143,19 @@ describe('ss-container-inline navigation token handling', () => {
     delete (window as any).skyslope;
   });
 
+  it('drops the token on navigation when the host has since removed getToken', async () => {
+    const { component, iframeEl } = makeComponent(() => 'token-1');
+    await component.handleAuthFailed();
+    expect(iframeEl.navigatedTo).toContain('#t=token-1');
+
+    stubWidget(null); // the host calls initialize() again, without getToken
+    await component.navigateTo();
+
+    expect(component.token).toBeNull();
+    expect(iframeEl.src).not.toContain('#t=');
+    expect(iframeEl.src.startsWith(Env.formsUrl)).toBe(true); // reloaded without a token
+  });
+
   it('does not carry a token on navigation in the normal (cookie) path', async () => {
     let calls = 0;
     const { component, iframeEl } = makeComponent(() => `token-${++calls}`);
