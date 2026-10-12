@@ -859,6 +859,21 @@ describe('ss-container-inline renewal scheduling', () => {
       expect(getToken).not.toHaveBeenCalled();
     });
 
+    // Taken up, a later cookie wall would count as the token path failing and skip the token path.
+    it('is left alone when the session expiry has no usable exp', async () => {
+      const getToken = jest.fn(() => jwtExpiringIn(3600));
+      const { component, frame, fromForms } = restored(getToken);
+
+      fromForms({ status: 'forms-session-expiry', sessionless: true });
+      expect(component.tokenMode).toBe(false);
+
+      fromForms({ status: 'forms-auth-failed' });
+      await settle();
+      expect(getToken).toHaveBeenCalled();
+      expect(frame.location.replace).toHaveBeenCalled();
+      component.clearRenewalTimer();
+    });
+
     it('is left alone when the host has no getToken', () => {
       const { component, fromForms } = restored(null);
 

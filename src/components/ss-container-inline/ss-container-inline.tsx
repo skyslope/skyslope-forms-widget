@@ -625,9 +625,12 @@ export class SsContainerInline {
   // (sessionless): then Forms restored that session after a host reload or a remount, and we take
   // it up so it keeps renewing. Older Forms, and cookie sessions, never send that flag.
   private handleSessionExpiry(data: FrameMessage): void {
-    if (!this.tokenMode && (data.sessionless !== true || !this.adoptTokenSession())) return;
+    // Without an expiry there is nothing to time, so take up no session either: once taken up, a
+    // later Forms sign-in failure would no longer switch to the token path.
     const exp = expToMs(data.exp);
-    if (exp != null) this.scheduleRenewal(exp);
+    if (exp == null) return;
+    if (!this.tokenMode && (data.sessionless !== true || !this.adoptTokenSession())) return;
+    this.scheduleRenewal(exp);
   }
 
   // Forms could not sign in inside the frame (Safari's third-party-cookie wall, say). With a
