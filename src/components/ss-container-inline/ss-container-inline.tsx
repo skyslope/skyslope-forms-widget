@@ -280,6 +280,9 @@ export class SsContainerInline {
   private handleRenewalFailure(): void {
     this.clearRenewalTimer();
     if (this.renewalRetryUsed) {
+      // Give up until the host acts (refreshToken or clearToken): coming back to the tab must not
+      // start renewing again and raise the same error each time.
+      this.renewalDueAt = null;
       this.authError.emit({ reason: 'token-renewal-failed' });
       return;
     }

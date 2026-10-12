@@ -914,6 +914,21 @@ describe('ss-container-inline renewal scheduling', () => {
       component.clearRenewalTimer();
     });
 
+    it('does not start again after a renewal has given up', async () => {
+      let calls = 0;
+      const { component, emitted } = makeComponent(() => (++calls === 1 ? jwtExpiringIn(60) : null));
+      withIframe(component);
+      await component.handleAuthFailed();
+      await component.renewNow(); // fails, one retry left
+      await component.renewNow(); // fails again: gives up
+      expect(emitted.map((e) => e.reason)).toEqual(['token-renewal-failed']);
+      component.renewNow = jest.fn();
+
+      component.handleVisibilityChange();
+
+      expect(component.renewNow).not.toHaveBeenCalled();
+    });
+
     it('does nothing while the tab is still hidden', async () => {
       const { component } = makeComponent(() => jwtExpiringIn(60));
       withIframe(component);
