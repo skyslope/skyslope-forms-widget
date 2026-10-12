@@ -2,7 +2,7 @@
 import '@stencil/core/testing';
 import { Env } from '@stencil/core';
 import { SsContainerInline } from '../ss-container-inline';
-import { SkySlopeWidget } from '../../../globalScript';
+import reinitializeGlobalScript, { SkySlopeWidget, readGetToken } from '../../../globalScript';
 
 // The real `stencil test` injects env from stencil.config (dev formsUrl = http://localhost:3001/).
 // Set it here too so getUrl() / the message handlers have a formsUrl when the spec is executed
@@ -51,6 +51,11 @@ function makeComponent(getToken: GetToken | null): {
   const iframeEl = { src: '' };
   component.iframe = () => iframeEl;
   return { component, emitted, iframeEl };
+}
+
+// Let a few rounds of promise callbacks run, so async handlers reach their next await.
+async function settle() {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
 describe('ss-container-inline narrow-to-Safari token fallback', () => {
@@ -305,6 +310,39 @@ describe('ss-container-inline message handling / origin trust', () => {
     component.handleMessage(messageEvent('http://localhost:3001', 'not-json{'));
     expect(emitted).toEqual([]);
   });
+
+  it('ignores a payload with a non-string status, or no payload at all, without throwing', () => {
+    const { component, emitted } = makeComponent(null);
+    withFrame(component);
+    expect(() => {
+      component.handleMessage(messageEvent('http://localhost:3001', { status: 42 }));
+      component.handleMessage(messageEvent('http://localhost:3001', JSON.stringify({ status: { startsWith: 'x' } })));
+      component.handleMessage(messageEvent('http://localhost:3001', 'null'));
+      component.handleMessage(messageEvent('http://localhost:3001', null));
+    }).not.toThrow();
+    expect(emitted).toEqual([]);
+  });
+
+  // Renewals and clears go to the app that last spoke. A message we reject must not move that,
+  // or a token meant for DigiSign would be sent to the Forms origin (or the other way round).
+  it('does not let a rejected message change which app is in the frame', () => {
+    const { component, emitted } = makeComponent(null);
+    withFrame(component);
+    component.handleMessage(messageEvent('http://localhost:3000', { status: 'digisign-token-cleared' }));
+    expect(component.frameApp).toBe('digisign');
+
+    // Forms origin, but from another window.
+    component.handleMessage(messageEvent('http://localhost:3001', { status: 'forms-session-expiry', exp: 1 }, { postMessage: jest.fn() }));
+    // Forms origin, our frame, but not JSON.
+    component.handleMessage(messageEvent('http://localhost:3001', 'not-json{'));
+    // Forms origin, our frame, but a status that is not a string.
+    component.handleMessage(messageEvent('http://localhost:3001', { status: 7 }));
+    // Forms origin, our frame, but a DigiSign status: Forms may only send forms-* statuses.
+    component.handleMessage(messageEvent('http://localhost:3001', { status: 'digisign-auth-failed' }));
+
+    expect(component.frameApp).toBe('digisign');
+    expect(emitted).toEqual([]);
+  });
 });
 
 // The renewal timer lives in the host page, which is why it survives Forms navigating away.
@@ -328,7 +366,7 @@ describe('ss-container-inline renewal scheduling', () => {
   // fetchHostToken also arms a timer (the getToken deadline), so a flat list of delays cannot
   // tell us which one is the renewal. Hand out an id per call and look up the one the
   // component actually kept as its renewal timer.
-  let timers: Array<{ id: number; ms: number }>;
+  let timers: Array<{ id: number; ms: number; fn: () => void }>;
   let realSetTimeout: typeof setTimeout;
   let nextId: number;
 
@@ -336,9 +374,9 @@ describe('ss-container-inline renewal scheduling', () => {
     timers = [];
     nextId = 1;
     realSetTimeout = global.setTimeout;
-    (global as any).setTimeout = (_fn: any, ms?: number) => {
+    (global as any).setTimeout = (fn: () => void, ms?: number) => {
       const id = nextId++;
-      timers.push({ id, ms: ms ?? 0 });
+      timers.push({ id, ms: ms ?? 0, fn });
       return id;
     };
   });
@@ -673,6 +711,160 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewalTimer).toBeNull();
   });
 
+  it('gives up on a getToken that never settles after 30s, tells the host, and lets a later wall try again', async () => {
+    let next: () => string | Promise<string> = () => new Promise<string>(() => {});
+    const { component, emitted } = makeComponent(() => next());
+    const replace = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage: jest.fn(), location: { replace } }, src: '' });
+
+    let finished = false;
+    const falling = component.handleAuthFailed().then(() => (finished = true));
+    await settle();
+    expect(finished).toBe(false); // still waiting on the host
+    const deadline = timers.find(t => t.ms === 30_000);
+    expect(deadline).toBeDefined();
+
+    deadline.fn();
+    await settle();
+    expect(finished).toBe(true);
+    await falling;
+
+    expect(emitted.map(e => e.reason)).toEqual(['token-callback-failed', 'iframe-auth-failed']);
+    expect((emitted[0].error as Error).message).toBe('getToken timed out');
+    expect(replace).not.toHaveBeenCalled();
+    expect(component.tokenMode).toBe(false);
+
+    // The next wall starts over instead of hitting the "already tried" guard.
+    next = () => jwtExpiringIn(3600);
+    await component.handleAuthFailed();
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0][0]).toContain('#t=');
+  });
+
+  it('loads nothing when the container goes away while the fallback waits on getToken', async () => {
+    let release: (token: string) => void = () => {};
+    const { component, emitted, iframeEl } = makeComponent(() => new Promise<string>(resolve => (release = resolve)));
+    const replace = jest.fn();
+    component.iframe = () => ({ contentWindow: { postMessage: jest.fn(), location: { replace } }, src: '' });
+
+    const falling = component.handleAuthFailed();
+    component.disconnectedCallback();
+    release(jwtExpiringIn(3600));
+    await falling;
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(iframeEl.src).toBe('');
+    expect(component.renewalTimer).toBeNull();
+    expect(emitted).toEqual([]);
+  });
+
+  it('retries a renewal Forms rejected once, 30s later, by asking the host again', async () => {
+    let n = 0;
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600 + 600 * n++));
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    postMessage.mockClear();
+
+    component.handleTokenInstalled({ ok: false });
+    expect(renewalDelay(component)).toBe(30_000);
+    expect(emitted).toEqual([]);
+
+    // The retry timer fires: a new token goes to Forms.
+    timers.find(t => t.id === component.renewalTimer).fn();
+    await settle();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+
+    // That renewal worked, so the next failure gets its own retry instead of reporting at once.
+    component.handleTokenInstalled({ ok: true, exp: Math.floor(Date.now() / 1000) + 7200 });
+    component.handleTokenInstalled({ ok: false });
+    expect(emitted).toEqual([]);
+    expect(renewalDelay(component)).toBe(30_000);
+    component.clearRenewalTimer();
+  });
+
+  it('falls back to the expiry it already knows when Forms answers without one (an older Forms)', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    const known = component.expiresAt;
+    expect(known).not.toBeNull();
+
+    component.handleTokenInstalled({ ok: true });
+
+    expect(emitted).toEqual([]);
+    expect(component.lastInstalledExpiry).toBe(known);
+    expectDelayNear(renewalDelay(component), 3600_000 - 3 * 60_000);
+    component.clearRenewalTimer();
+  });
+
+  it('treats a renewal whose getToken returns nothing as a failed renewal: retry once, then tell the host', async () => {
+    let next: string | null = jwtExpiringIn(3600);
+    const { component, emitted } = makeComponent(() => next);
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    postMessage.mockClear();
+    next = null;
+
+    await component.renewNow();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(renewalDelay(component)).toBe(30_000);
+    expect(emitted).toEqual([]);
+
+    await component.renewNow();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
+    expect(component.renewalTimer).toBeNull();
+  });
+
+  describe('when the tab becomes visible again', () => {
+    let visibility = 'visible';
+    beforeEach(() => {
+      visibility = 'visible';
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    });
+    afterEach(() => {
+      delete (document as any).visibilityState;
+    });
+
+    it('renews at once when a throttled timer left it past the renewal point', async () => {
+      const { component } = makeComponent(() => jwtExpiringIn(60));
+      withIframe(component);
+      await component.handleAuthFailed();
+      component.renewNow = jest.fn();
+
+      component.handleVisibilityChange();
+
+      expect(component.renewNow).toHaveBeenCalledTimes(1);
+      component.clearRenewalTimer();
+    });
+
+    it('leaves it to the timer when it is not yet past the renewal point', async () => {
+      const { component } = makeComponent(() => jwtExpiringIn(3600));
+      withIframe(component);
+      await component.handleAuthFailed();
+      component.renewNow = jest.fn();
+
+      component.handleVisibilityChange();
+
+      expect(component.renewNow).not.toHaveBeenCalled();
+      component.clearRenewalTimer();
+    });
+
+    it('does nothing while the tab is still hidden', async () => {
+      const { component } = makeComponent(() => jwtExpiringIn(60));
+      withIframe(component);
+      await component.handleAuthFailed();
+      component.renewNow = jest.fn();
+      visibility = 'hidden';
+
+      component.handleVisibilityChange();
+
+      expect(component.renewNow).not.toHaveBeenCalled();
+      component.clearRenewalTimer();
+    });
+  });
+
   it('clears a pending renewal when the container goes away', async () => {
     const { component } = makeComponent(() => jwtExpiringIn(3600));
     withIframe(component);
@@ -925,6 +1117,22 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src).toBe(''); // the old src, untouched
   });
 
+  it('ends the token session and resolves at once when there is no frame to ask', async () => {
+    const { component, postMessage } = await onTokenPath();
+    component.iframe = () => null;
+    let done = false;
+
+    const clearing = component.clearToken().then(() => (done = true));
+    await settle();
+
+    expect(done).toBe(true); // did not sit out the 3s wait
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(component.tokenMode).toBe(false);
+    expect(component.token).toBeNull();
+    expect(component.renewalTimer).toBeNull();
+    await clearing;
+  });
+
   it('is a no-op for the global API until an inline container registers', async () => {
     const widget = new SkySlopeWidget();
     await expect(widget.clearToken()).resolves.toBeUndefined();
@@ -1004,10 +1212,6 @@ describe('ss-container-inline DigiSign hand-off', () => {
     const fromDigisign = (data: any, source: any = frame) => made.component.handleMessage({ origin: DS, source, data } as any);
     const fromForms = (data: any) => made.component.handleMessage({ origin: FORMS, source: frame, data } as any);
     return { ...made, frame, fromDigisign, fromForms, frameLoaded };
-  }
-
-  async function settle() {
-    for (let i = 0; i < 5; i++) await Promise.resolve();
   }
 
   it('answers DigiSign with a token posted to its exact origin in a token session', async () => {
@@ -1103,6 +1307,95 @@ describe('ss-container-inline DigiSign hand-off', () => {
     expect(component.frameApp).toBe('forms');
   });
 
+  it('finishes a DigiSign clear after the timeout when the Forms load never fires', async () => {
+    const realSetTimeout = global.setTimeout;
+    const held: Array<{ fn: () => void; ms: number }> = [];
+    (global as any).setTimeout = (fn: () => void, ms?: number) => {
+      held.push({ fn, ms: ms ?? 0 });
+      return held.length;
+    };
+    try {
+      const { component, fromDigisign, iframeEl } = framed(() => jwtExpiringIn(3600));
+      await component.handleAuthFailed();
+      fromDigisign({ status: 'digisign-auth-required' });
+      await settle();
+      let cleared = false;
+
+      const clearing = component.clearToken().then(() => (cleared = true));
+      await settle();
+      fromDigisign({ status: 'digisign-token-cleared' });
+      await settle();
+      expect(iframeEl.src.endsWith('#forms-clear=1')).toBe(true);
+      expect(cleared).toBe(false); // waiting on the Forms load
+
+      // The newest 3s timer is the wait for that load; the older one was the wait for DigiSign.
+      const waits = held.filter(t => t.ms === 3000);
+      expect(waits).toHaveLength(2);
+      waits[1].fn();
+      await settle();
+
+      expect(cleared).toBe(true);
+      await clearing;
+    } finally {
+      (global as any).setTimeout = realSetTimeout;
+    }
+  });
+
+  it('tells the host when getToken has no token for DigiSign', async () => {
+    let next: string | null = jwtExpiringIn(3600);
+    const { component, emitted, frame, fromDigisign } = framed(() => next);
+    await component.handleAuthFailed();
+    frame.postMessage.mockClear();
+    next = null;
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+    component.clearRenewalTimer();
+  });
+
+  it('tells the host when getToken throws while DigiSign waits', async () => {
+    const boom = new Error('mint failed');
+    let fail = false;
+    const { component, emitted, frame, fromDigisign } = framed(() => {
+      if (fail) throw boom;
+      return jwtExpiringIn(3600);
+    });
+    await component.handleAuthFailed();
+    frame.postMessage.mockClear();
+    fail = true;
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'token-callback-failed', error: boom }, { reason: 'iframe-auth-failed' }]);
+    component.clearRenewalTimer();
+  });
+
+  it('sends the DigiSign token to the DigiSign origin even if Forms spoke while getToken ran', async () => {
+    let call = 0;
+    let release: (token: string) => void = () => {};
+    const { component, frame, fromDigisign, fromForms } = framed(() =>
+      ++call === 1 ? jwtExpiringIn(3600) : new Promise<string>(resolve => (release = resolve)),
+    );
+    await component.handleAuthFailed();
+    frame.postMessage.mockClear();
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 });
+    expect(component.frameApp).toBe('forms');
+    release(jwtExpiringIn(3600, 'ds'));
+    await settle();
+
+    expect(frame.postMessage).toHaveBeenCalledTimes(1);
+    expect(frame.postMessage.mock.calls[0][0].status).toBe('digisign-set-token');
+    expect(frame.postMessage.mock.calls[0][1]).toBe(DS);
+    component.clearRenewalTimer();
+  });
+
   it('does not add the Forms clear fragment when Forms itself was asked to clear', async () => {
     const { component, frame, fromForms, iframeEl } = framed(() => jwtExpiringIn(3600));
     await component.handleAuthFailed();
@@ -1166,5 +1459,77 @@ describe('ss-container-inline DigiSign hand-off', () => {
     fromDigisign({ status: 'digisign-auth-failed' });
 
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+});
+
+describe('globalScript widget API', () => {
+  afterEach(() => {
+    delete (window as any).skyslope;
+  });
+
+  it('keeps getToken in module scope, off the widget the page can reach', () => {
+    const getToken = () => 'tok';
+    const widget = new SkySlopeWidget();
+    widget.initialize({ getToken } as any);
+
+    expect(readGetToken()).toBe(getToken);
+    expect(Object.values(widget)).not.toContain(getToken);
+  });
+
+  it('forgets getToken when the global script is set up again', () => {
+    const widget = new SkySlopeWidget();
+    widget.initialize({ getToken: () => 'tok' } as any);
+    expect(readGetToken()).not.toBeNull();
+
+    reinitializeGlobalScript();
+
+    expect(readGetToken()).toBeNull();
+  });
+
+  it('refuses a second refresh registration and keeps the first', () => {
+    const widget = new SkySlopeWidget();
+    const first = jest.fn();
+    widget.registerRefresh(first);
+
+    expect(() => widget.registerRefresh(jest.fn())).toThrow(/Refresh Callback is already defined/);
+    widget.refreshToken();
+    expect(first).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a second clear-token registration and keeps the first', async () => {
+    const widget = new SkySlopeWidget();
+    const first = jest.fn().mockResolvedValue(undefined);
+    widget.registerClearToken(first);
+
+    expect(() => widget.registerClearToken(jest.fn().mockResolvedValue(undefined))).toThrow(/Clear Token Callback is already defined/);
+    await widget.clearToken();
+    expect(first).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes refreshToken a no-op until a container registers, then routes it there', async () => {
+    const widget = new SkySlopeWidget();
+    await expect(widget.refreshToken()).resolves.toBeUndefined();
+
+    const refresh = jest.fn(() => Promise.resolve());
+    widget.registerRefresh(refresh);
+    await widget.refreshToken();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the host wait for the renewal refreshToken starts', async () => {
+    const widget = new SkySlopeWidget();
+    let finishRenewal: () => void = () => {};
+    widget.registerRefresh(() => new Promise<void>((resolve) => (finishRenewal = resolve)));
+    let done = false;
+
+    const refreshing = widget.refreshToken().then(() => {
+      done = true;
+    });
+    await settle();
+    expect(done).toBe(false);
+
+    finishRenewal();
+    await refreshing;
+    expect(done).toBe(true);
   });
 });
