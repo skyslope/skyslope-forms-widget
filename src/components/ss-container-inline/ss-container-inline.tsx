@@ -133,6 +133,11 @@ export class SsContainerInline {
   // Null while we are not on the token path or the token could not be decoded.
   private expiresAt: number | null = null;
 
+  // When the next renewal is due, in epoch ms, including any minimum wait (a retry, or the floor
+  // after a renewal post). The visibility check renews only once this has passed. Null when no
+  // renewal is planned.
+  private renewalDueAt: number | null = null;
+
   // ReturnType<typeof setTimeout> rather than number: @types/node is in scope here, so the
   // bare global is typed as Node's Timeout. This form is correct in both environments.
   private renewalTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,9 +196,11 @@ export class SsContainerInline {
   private scheduleRenewal(expiresAt: number | null, minDelayMs = 0): void {
     this.clearRenewalTimer();
     this.expiresAt = expiresAt;
+    this.renewalDueAt = null;
     if (expiresAt == null) return;
     // A token with less life left than the lead is already inside the window, so go now.
     const delay = Math.max(minDelayMs, expiresAt - Date.now() - RENEWAL_LEAD_MS);
+    this.renewalDueAt = Date.now() + delay;
     this.renewalTimer = setTimeout(() => {
       void this.renewNow();
     }, delay);
@@ -278,6 +285,7 @@ export class SsContainerInline {
     }
     // The current token still works until it really expires, so one failure is not the end.
     this.renewalRetryUsed = true;
+    this.renewalDueAt = Date.now() + RENEWAL_RETRY_MS;
     this.renewalTimer = setTimeout(() => {
       void this.renewNow();
     }, RENEWAL_RETRY_MS);
@@ -321,8 +329,8 @@ export class SsContainerInline {
   // back already past its renewal point. Check on the way in rather than trusting the timer.
   private handleVisibilityChange = (): void => {
     if (document.visibilityState !== 'visible') return;
-    if (!this.tokenMode || this.expiresAt == null) return;
-    if (Date.now() >= this.expiresAt - RENEWAL_LEAD_MS) void this.renewNow();
+    if (!this.tokenMode || this.renewalDueAt == null) return;
+    if (Date.now() >= this.renewalDueAt) void this.renewNow();
   };
 
   private addUrlParams(url: string, params: Record<string, string> | string | URLSearchParams): string {
@@ -464,6 +472,7 @@ export class SsContainerInline {
     this.renewing = null;
     this.token = null;
     this.expiresAt = null;
+    this.renewalDueAt = null;
     this.lastInstalledExpiry = null;
     this.renewalRetryUsed = false;
     // Leave token mode so the next cookie wall can start the token path again, for the next user.

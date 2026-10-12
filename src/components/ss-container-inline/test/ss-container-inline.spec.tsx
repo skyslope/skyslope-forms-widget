@@ -843,6 +843,28 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewalTimer).toBeNull();
   });
 
+  // A failed getToken during a renewal is reported to the host at once, as everywhere else, and the
+  // renewal still gets its one retry before token-renewal-failed.
+  it('reports a getToken that throws during a renewal, then retries once', async () => {
+    let calls = 0;
+    const { component, emitted } = makeComponent(() => {
+      calls += 1;
+      if (calls > 1) throw new Error('host down');
+      return jwtExpiringIn(3600);
+    });
+    withIframe(component);
+    await component.handleAuthFailed();
+
+    await component.renewNow();
+    expect(emitted.map((e) => e.reason)).toEqual(['token-callback-failed']);
+    expect(component.renewalRetryUsed).toBe(true);
+    expect(component.renewalTimer).not.toBeNull();
+
+    await component.renewNow();
+    expect(emitted.map((e) => e.reason)).toEqual(['token-callback-failed', 'token-callback-failed', 'token-renewal-failed']);
+    component.clearRenewalTimer();
+  });
+
   describe('when the tab becomes visible again', () => {
     let visibility = 'visible';
     beforeEach(() => {
@@ -869,6 +891,21 @@ describe('ss-container-inline renewal scheduling', () => {
       const { component } = makeComponent(() => jwtExpiringIn(3600));
       withIframe(component);
       await component.handleAuthFailed();
+      component.renewNow = jest.fn();
+
+      component.handleVisibilityChange();
+
+      expect(component.renewNow).not.toHaveBeenCalled();
+      component.clearRenewalTimer();
+    });
+
+    // Right after a renewal post the next one waits at least a retry interval, even for a token
+    // already inside the lead window. Coming back to the tab must not skip that wait.
+    it('keeps the wait after a renewal post', async () => {
+      const { component } = makeComponent(() => jwtExpiringIn(60));
+      withIframe(component);
+      await component.handleAuthFailed();
+      await component.renewNow();
       component.renewNow = jest.fn();
 
       component.handleVisibilityChange();
