@@ -41,14 +41,16 @@ function jwtExpiringIn(seconds: number, marker = 'tok'): string {
 function makeComponent(getToken: GetToken | null): {
   component: any;
   emitted: Array<{ reason: string; error?: unknown }>;
-  iframeEl: { src: string };
+  iframeEl: { src: string; navigatedTo?: string; contentWindow: any };
 } {
   stubWidget(getToken);
   const component = new SsContainerInline() as any;
   const emitted: Array<{ reason: string; error?: unknown }> = [];
   component.authError = { emit: (detail: any) => emitted.push(detail) };
   // Stand in for the shadow-root iframe (el is a read-only @Element in a real render).
-  const iframeEl = { src: '' };
+  // Cookie loads set src. Token loads navigate the frame's window instead, recorded in navigatedTo.
+  const iframeEl: { src: string; navigatedTo?: string; contentWindow: any } = { src: '', contentWindow: null };
+  iframeEl.contentWindow = { postMessage: jest.fn(), location: { replace: (url: string) => (iframeEl.navigatedTo = url) } };
   component.iframe = () => iframeEl;
   return { component, emitted, iframeEl };
 }
@@ -80,18 +82,21 @@ describe('ss-container-inline narrow-to-Safari token fallback', () => {
     const { component, emitted, iframeEl } = makeComponent(() => 'jwt.abc.def');
     await component.handleAuthFailed();
     expect(component.token).toBe('jwt.abc.def');
-    expect(iframeEl.src).toContain('#t=jwt.abc.def');
+    const loaded = iframeEl.navigatedTo ?? '';
+    expect(loaded).toContain('#t=jwt.abc.def');
     // Fragment comes after the query so the Forms app reads the token at load.
-    expect(iframeEl.src.indexOf('#t=')).toBeGreaterThan(iframeEl.src.indexOf('widgetTrack='));
+    expect(loaded.indexOf('#t=')).toBeGreaterThan(loaded.indexOf('widgetTrack='));
     // Token is a fragment, never a query param (fragments aren't sent to the server).
-    expect(iframeEl.src).not.toMatch(/[?&]t=/);
+    expect(loaded).not.toMatch(/[?&]t=/);
+    // Loaded through the frame's window, so the token never lands in the src attribute.
+    expect(iframeEl.src).toBe('');
     expect(emitted).toEqual([]);
   });
 
   it('awaits an async getToken in the fallback', async () => {
     const { component, iframeEl } = makeComponent(async () => 'async-token');
     await component.handleAuthFailed();
-    expect(iframeEl.src).toContain('#t=async-token');
+    expect(iframeEl.navigatedTo).toContain('#t=async-token');
   });
 
   it('on forms-auth-failed with no getToken, raises authError(iframe-auth-failed) and injects no token', async () => {
@@ -123,11 +128,11 @@ describe('ss-container-inline narrow-to-Safari token fallback', () => {
     let calls = 0;
     const { component, emitted, iframeEl } = makeComponent(() => `token-${++calls}`);
     await component.handleAuthFailed();
-    expect(iframeEl.src).toContain('#t=token-1');
+    expect(iframeEl.navigatedTo).toContain('#t=token-1');
 
-    iframeEl.src = 'SENTINEL';
+    iframeEl.navigatedTo = 'SENTINEL';
     await component.handleAuthFailed();
-    expect(iframeEl.src).toBe('SENTINEL'); // not reloaded a second time
+    expect(iframeEl.navigatedTo).toBe('SENTINEL'); // not reloaded a second time
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
     expect(calls).toBe(1); // getToken not called again
   });
@@ -150,9 +155,9 @@ describe('ss-container-inline navigation token handling', () => {
     let calls = 0;
     const { component, iframeEl } = makeComponent(() => `token-${++calls}`);
     await component.handleAuthFailed(); // enters token mode, injects token-1
-    expect(iframeEl.src).toContain('#t=token-1');
+    expect(iframeEl.navigatedTo).toContain('#t=token-1');
     await component.navigateTo();
-    expect(iframeEl.src).toContain('#t=token-2');
+    expect(iframeEl.navigatedTo).toContain('#t=token-2');
   });
 });
 
@@ -194,7 +199,7 @@ describe('ss-container-inline refreshToken (host-initiated renewal)', () => {
   it('URL-encodes the token it puts in the #t= fragment', async () => {
     const { component, iframeEl } = makeComponent(() => 'a+b/c=d&e');
     await component.handleAuthFailed();
-    expect(iframeEl.src.endsWith('#t=a%2Bb%2Fc%3Dd%26e')).toBe(true);
+    expect(iframeEl.navigatedTo?.endsWith('#t=a%2Bb%2Fc%3Dd%26e')).toBe(true);
   });
 
   // A cookie-based host has no getToken. If it calls refreshToken() anyway - and the native
@@ -923,10 +928,14 @@ describe('ss-container-inline renewal scheduling', () => {
       await component.renewNow(); // fails again: gives up
       expect(emitted.map((e) => e.reason)).toEqual(['token-renewal-failed']);
       component.renewNow = jest.fn();
+      // Come back an hour later, well past any renewal or retry that was planned.
+      const later = Date.now() + 60 * 60 * 1000;
+      jest.spyOn(Date, 'now').mockReturnValue(later);
 
       component.handleVisibilityChange();
 
       expect(component.renewNow).not.toHaveBeenCalled();
+      (Date.now as jest.Mock).mockRestore();
     });
 
     it('does nothing while the tab is still hidden', async () => {
@@ -1066,6 +1075,18 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     tokenCleared(component);
     await clearing;
     expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
+  });
+
+  it('never writes the token into src when the frame has no window', async () => {
+    const { component } = makeComponent(() => jwtExpiringIn(3600));
+    const iframeEl: any = { src: '', contentWindow: null };
+    component.iframe = () => iframeEl;
+
+    await component.handleAuthFailed();
+
+    expect(iframeEl.src).toBe('');
+    expect(component.tokenMode).toBe(false);
+    expect(component.token).toBeNull();
   });
 
   it('leaves token mode when the frame cannot be loaded with the token, so a later wall can retry', async () => {
@@ -1209,7 +1230,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
 
     next = jwtExpiringIn(3600);
     await component.handleAuthFailed(); // the next wall, after a reload
-    expect(iframeEl.src).toContain('#t='); // this frame has no window, so the load uses src
+    expect(iframeEl.navigatedTo).toContain('#t='); // the token path started again
   });
 
   it('ignores a forms-token-cleared from another window on the Forms origin', async () => {

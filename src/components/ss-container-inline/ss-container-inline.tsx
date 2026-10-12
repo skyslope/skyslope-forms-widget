@@ -395,7 +395,9 @@ export class SsContainerInline {
     // A URL that carries a token is loaded by navigating the frame's own window. The src attribute
     // stays in the host page's DOM for the whole session, where other scripts and session-replay
     // tools could read the token.
-    if (this.token != null && iframe.contentWindow != null) {
+    if (this.token != null) {
+      // No frame window to navigate: refuse rather than write the token into src.
+      if (iframe.contentWindow == null) return false;
       iframe.contentWindow.location.replace(url);
       return true;
     }
