@@ -23,7 +23,7 @@ export class SkySlopeWidget {
   private _headerVariant: string | null;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
-  private _refreshCallback: () => void;
+  private _refreshCallback: () => Promise<void>;
   private _clearTokenCallback: () => Promise<void>;
 
   constructor() {
@@ -76,8 +76,8 @@ export class SkySlopeWidget {
   // Push a fresh token to the app in the frame (Forms, or DigiSign when it is there) by postMessage,
   // not the URL, so it renews in place without a reload. Hosts call this when their token rotates.
   // Does nothing until an inline container is mounted, or on the cookie path.
-  refreshToken = () => {
-    this._refreshCallback?.();
+  refreshToken = async (): Promise<void> => {
+    await this._refreshCallback?.();
   };
   // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
   // switches users. Resolves once the frame's reload without a token has started (after a DigiSign
@@ -106,7 +106,7 @@ export class SkySlopeWidget {
     this._navigateCallback = navigateCallback;
   };
 
-  registerRefresh = (refreshCallback: () => void) => {
+  registerRefresh = (refreshCallback: () => Promise<void>) => {
     if (this._refreshCallback) {
       throw new Error('Refresh Callback is already defined. Is more than one inline container running?');
     }
