@@ -122,13 +122,16 @@ window.skyslope.widget.initialize({
 Once the fallback is active:
 
 - The widget renews the session on its own a few minutes before it expires, by calling `getToken`
-  and handing the token to the app in the iframe with `postMessage`. It may return the same cached
-  token each time; the session still renews.
+  and handing the token to the app in the iframe with `postMessage`. `getToken` should return a
+  token that is valid for at least the next 5 minutes. A cached token is fine while it has that
+  much life left.
 - Each navigation fetches a fresh token from `getToken`.
 - When your token rotates early (an account switch, say), call
   `await window.skyslope.widget.refreshToken()` to renew at once without a reload.
 - When Forms moves the iframe to DigiSign (the envelope builder), DigiSign asks the widget for a
   token and gets one the same way. Renewals then go to whichever app is in the iframe.
+- If you reload your page or reopen the widget while Forms is still signed in from a token, the
+  widget picks the token path back up on its own, so renewals and DigiSign keep working.
 
 These hand-offs need Forms and DigiSign versions that accept them; with older versions
 `refreshToken()` does nothing and the token still refreshes on navigation.

@@ -739,8 +739,9 @@ describe('ss-container-inline renewal scheduling', () => {
     await component.handleAuthFailed();
     emitted.length = 0;
 
-    // First ack establishes what the SESSION expires at - nothing to compare against yet.
-    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+    // First ack establishes what the SESSION expires at - nothing to compare against yet. It is
+    // inside the renewal window, where a renewal must move it.
+    const sessionExp = Math.floor(Date.now() / 1000) + 120;
     component.handleTokenInstalled({ ok: true, exp: sessionExp });
     expect(emitted).toEqual([]);
 
@@ -766,6 +767,132 @@ describe('ss-container-inline renewal scheduling', () => {
 
     component.handleTokenInstalled({ ok: false });
     expect(emitted).toEqual([{ reason: 'token-renewal-failed' }]);
+  });
+
+  // The host called refreshToken() long before the renewal window. The exchange hands back the same
+  // cached session token, so Forms answers with the same expiry. That is not a failed renewal.
+  it('keeps renewing after an early refreshToken that comes back with the same expiry', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    const postMessage = withIframe(component);
+    await component.handleAuthFailed();
+    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+    component.handleTokenInstalled({ ok: false }); // an earlier failure used the retry
+    expect(component.renewalRetryUsed).toBe(true);
+    postMessage.mockClear();
+
+    await component.refreshToken();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(emitted).toEqual([]);
+    expectDelayNear(renewalDelay(component), 1800_000 - 3 * 60_000);
+
+    // A second early refresh is still not a failure.
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+    expect(emitted).toEqual([]);
+    expectDelayNear(renewalDelay(component), 1800_000 - 3 * 60_000);
+    component.clearRenewalTimer();
+  });
+
+  it('still counts the same expiry inside the renewal window as a failed renewal', async () => {
+    const { component, emitted } = makeComponent(() => jwtExpiringIn(3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+    const sessionExp = Math.floor(Date.now() / 1000) + 150;
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    component.handleTokenInstalled({ ok: true, exp: sessionExp });
+
+    expect(component.renewalRetryUsed).toBe(true);
+    expect(renewalDelay(component)).toBe(30_000);
+    expect(emitted).toEqual([]);
+    component.clearRenewalTimer();
+  });
+
+  it('caps the renewal timer at the longest delay the browser allows', async () => {
+    // Past about 24.8 days setTimeout fires at once, which would renew right away.
+    const { component } = makeComponent(() => jwtExpiringIn(60 * 24 * 3600));
+    withIframe(component);
+    await component.handleAuthFailed();
+
+    expect(renewalDelay(component)).toBe(2 ** 31 - 1);
+    component.clearRenewalTimer();
+  });
+
+  describe('a token session Forms restored after a host reload or a remount', () => {
+    function restored(getToken: GetToken | null) {
+      const made = makeComponent(getToken);
+      const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
+      made.component.iframe = () => ({ contentWindow: frame, src: '' });
+      const fromForms = (data: any) => made.component.handleMessage({ origin: 'http://localhost:3001', source: frame, data } as any);
+      return { ...made, frame, fromForms };
+    }
+
+    it('is taken up when Forms says its session came from a widget token', async () => {
+      const getToken = jest.fn(() => jwtExpiringIn(3600));
+      const { component, emitted, frame, fromForms } = restored(getToken);
+      const sessionExp = Math.floor(Date.now() / 1000) + 1200;
+
+      fromForms({ status: 'forms-session-expiry', exp: sessionExp, sessionless: true });
+
+      expect(component.tokenMode).toBe(true);
+      expectDelayNear(renewalDelay(component), 1200_000 - 3 * 60_000);
+      expect(getToken).not.toHaveBeenCalled(); // no token until the renewal is due
+
+      await component.renewNow();
+      expect(frame.postMessage).toHaveBeenCalledTimes(1);
+      expect(frame.postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+      expect(emitted).toEqual([]);
+      component.clearRenewalTimer();
+    });
+
+    it('is left alone when the session expiry carries no sessionless flag (an older Forms, or cookies)', () => {
+      const getToken = jest.fn(() => jwtExpiringIn(3600));
+      const { component, fromForms } = restored(getToken);
+
+      fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 1200 });
+
+      expect(component.tokenMode).toBe(false);
+      expect(component.renewalTimer).toBeNull();
+      expect(getToken).not.toHaveBeenCalled();
+    });
+
+    it('is left alone when the host has no getToken', () => {
+      const { component, fromForms } = restored(null);
+
+      fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 1200, sessionless: true });
+
+      expect(component.tokenMode).toBe(false);
+      expect(component.renewalTimer).toBeNull();
+    });
+
+    it('still treats a later cookie wall as the loop guard', async () => {
+      const getToken = jest.fn(() => jwtExpiringIn(3600));
+      const { component, emitted, frame, fromForms } = restored(getToken);
+      fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 1200, sessionless: true });
+
+      fromForms({ status: 'forms-auth-failed' });
+      await settle();
+
+      expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+      expect(getToken).not.toHaveBeenCalled();
+      expect(frame.location.replace).not.toHaveBeenCalled();
+      component.clearRenewalTimer();
+    });
+
+    it('is not taken up right after the user signed out inside Forms', async () => {
+      const { component, emitted, fromForms } = restored(() => jwtExpiringIn(3600));
+      await component.handleAuthFailed();
+      fromForms({ status: 'forms-signed-out' });
+      emitted.length = 0;
+
+      fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 1200, sessionless: true });
+
+      expect(component.tokenMode).toBe(false);
+      expect(component.renewalTimer).toBeNull();
+    });
   });
 
   it('still sends a host token that expires before the session', async () => {
@@ -1408,7 +1535,7 @@ describe('ss-container-inline DigiSign hand-off', () => {
     delete (window as any).skyslope;
   });
 
-  function framed(getToken: GetToken) {
+  function framed(getToken: GetToken | null) {
     const made = makeComponent(getToken);
     const frame = { postMessage: jest.fn(), location: { replace: jest.fn() } };
     const loadListeners = new Set<() => void>();
@@ -1444,14 +1571,13 @@ describe('ss-container-inline DigiSign hand-off', () => {
     component.clearRenewalTimer();
   });
 
-  it('never sends a token to DigiSign in a cookie session', async () => {
-    const getToken = jest.fn(() => jwtExpiringIn(3600));
-    const { emitted, frame, fromDigisign } = framed(getToken);
+  it('refuses DigiSign outside token mode when the host has no getToken', async () => {
+    const { component, emitted, frame, fromDigisign } = framed(null);
 
     fromDigisign({ status: 'digisign-auth-required' });
     await settle();
 
-    expect(getToken).not.toHaveBeenCalled();
+    expect(component.tokenMode).toBe(false);
     expect(frame.postMessage).not.toHaveBeenCalled();
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
   });
@@ -1494,7 +1620,7 @@ describe('ss-container-inline DigiSign hand-off', () => {
   it('still treats a same-app answer with no gain as a failed renewal', async () => {
     const { component, fromForms } = framed(() => jwtExpiringIn(3600));
     await component.handleAuthFailed();
-    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const exp = Math.floor(Date.now() / 1000) + 120; // inside the renewal window
     fromForms({ status: 'forms-token-installed', ok: true, exp });
     fromForms({ status: 'forms-token-installed', ok: true, exp });
 
@@ -1733,6 +1859,103 @@ describe('ss-container-inline DigiSign hand-off', () => {
 
     expect(getToken).not.toHaveBeenCalled();
     expect(component.tokenMode).toBe(false);
+    expect(emitted).toEqual([]);
+  });
+
+  // After a host reload or a remount, Forms restored its token session from the frame's storage
+  // without a cookie wall, so the widget is not in token mode. DigiSign only asks in a token session.
+  it('takes up the token session when DigiSign asks outside token mode and the host has getToken', async () => {
+    const getToken = jest.fn(() => jwtExpiringIn(3600, 'ds'));
+    const { component, emitted, frame, fromDigisign } = framed(getToken);
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(component.tokenMode).toBe(true);
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(frame.postMessage).toHaveBeenCalledTimes(1);
+    expect(frame.postMessage.mock.calls[0][0].status).toBe('digisign-set-token');
+    expect(frame.postMessage.mock.calls[0][1]).toBe(DS);
+    expect(component.renewalTimer).not.toBeNull();
+    expect(emitted).toEqual([]);
+    component.clearRenewalTimer();
+  });
+
+  it('leaves token mode again when the taken-up session gets no token', async () => {
+    const { component, emitted, frame, fromDigisign } = framed(() => null);
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(component.tokenMode).toBe(false);
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+
+  // After clearToken(), DigiSign reloads and asks for a token while the widget reloads Forms with
+  // #forms-clear=1. Taking that ask up would race the reload that drops the old session, so the next
+  // session starts with a cookie wall, as it did before. A host reload is a new widget, which takes
+  // a restored session up.
+  it('ends a taken-up session on clearToken, and takes up no other until a new cookie wall', async () => {
+    const { component, emitted, frame, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600));
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    expect(component.tokenMode).toBe(true);
+
+    const clearing = component.clearToken();
+    await settle();
+    fromForms({ status: 'forms-token-cleared' });
+    await clearing;
+    expect(component.tokenMode).toBe(false);
+    expect(component.renewalTimer).toBeNull();
+    expect(component.adoptionBlocked).toBe(true);
+
+    emitted.length = 0;
+    frame.postMessage.mockClear();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    expect(component.tokenMode).toBe(false);
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+
+    // The cookie wall Forms hits after #forms-clear starts the next sign-in.
+    await component.handleAuthFailed();
+    expect(component.adoptionBlocked).toBe(false);
+    expect(component.tokenMode).toBe(true);
+    component.clearRenewalTimer();
+  });
+
+  it('starts over after an in-frame sign-out once a new cookie wall signs the user in', async () => {
+    const { component, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-signed-out' });
+    expect(component.adoptionBlocked).toBe(true);
+
+    await component.handleAuthFailed();
+
+    expect(component.adoptionBlocked).toBe(false);
+    component.clearRenewalTimer();
+  });
+
+  it('sends DigiSign nothing, and reports nothing, when the host signs out while getToken runs', async () => {
+    let call = 0;
+    let release: (token: string) => void = () => {};
+    const { component, emitted, frame, fromDigisign, fromForms } = framed(() =>
+      ++call === 1 ? jwtExpiringIn(3600) : new Promise<string>(resolve => (release = resolve)),
+    );
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    const clearing = component.clearToken();
+    await settle();
+    fromForms({ status: 'forms-token-cleared' });
+    await clearing;
+    release(jwtExpiringIn(3600, 'late'));
+    await settle();
+
+    const statuses = frame.postMessage.mock.calls.map(c => c[0]?.status);
+    expect(statuses).not.toContain('digisign-set-token');
     expect(emitted).toEqual([]);
   });
 
