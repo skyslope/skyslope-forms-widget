@@ -530,7 +530,9 @@ export class SsContainerInline {
 
   // Messages from the app in our frame. Each app is trusted only from its exact origin and only from
   // our own frame (another window on that origin, a second Forms tab say, must not drive this
-  // widget's auth), and may only send its own statuses, so DigiSign cannot start the Forms fallback.
+  // widget's auth). A status is accepted only from the origin of the app it names, so DigiSign
+  // cannot start the Forms fallback. When both apps share one origin (a local setup), the origin
+  // cannot tell them apart, and either app's statuses are accepted from it.
   private handleMessage = (event: MessageEvent) => {
     if (event.origin !== this.formsOrigin() && event.origin !== this.digisignOrigin()) return;
     const frameWindow = this.iframe()?.contentWindow;
