@@ -1620,7 +1620,8 @@ describe('ss-container-inline DigiSign hand-off', () => {
     await component.handleAuthFailed();
     fromDigisign({ status: 'digisign-auth-required' });
     await settle();
-    const exp = Math.floor(Date.now() / 1000) + 3600;
+    // Inside the renewal window, where an answer that gains nothing counts as a failed renewal.
+    const exp = Math.floor(Date.now() / 1000) + 120;
     fromDigisign({ status: 'digisign-token-installed', ok: true, exp });
 
     fromForms({ status: 'forms-session-expiry', exp });
@@ -1815,7 +1816,8 @@ describe('ss-container-inline DigiSign hand-off', () => {
     const { component, emitted, fromDigisign } = framed(() => jwtExpiringIn(3600));
     await component.handleAuthFailed();
     // DigiSign's session token comes from the exchange's cache, so every load reports the same expiry.
-    const sessionExp = Math.floor(Date.now() / 1000) + 1800;
+    // Inside the renewal window, where an answer that gains nothing counts as a failed renewal.
+    const sessionExp = Math.floor(Date.now() / 1000) + 120;
 
     for (let load = 0; load < 3; load++) {
       fromDigisign({ status: 'digisign-auth-required' });
@@ -1826,6 +1828,60 @@ describe('ss-container-inline DigiSign hand-off', () => {
     expect(component.renewalRetryUsed).toBe(false);
     expect(emitted).toEqual([]);
     expect(component.lastInstalledExpiry).toBe(sessionExp * 1000);
+    component.clearRenewalTimer();
+  });
+
+  it('gives a DigiSign sign-in its own renewal retry', async () => {
+    const { component, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    const exp = Math.floor(Date.now() / 1000) + 120;
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+    fromForms({ status: 'forms-token-installed', ok: true, exp }); // no gain: uses the retry
+    expect(component.renewalRetryUsed).toBe(true);
+
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+
+    expect(component.renewalRetryUsed).toBe(false);
+    component.clearRenewalTimer();
+  });
+
+  it('starts the next token session without the previous baseline or used retry', async () => {
+    const { component, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    const exp = Math.floor(Date.now() / 1000) + 120;
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+    expect(component.renewalRetryUsed).toBe(true);
+
+    const clearing = component.clearToken();
+    await settle();
+    fromForms({ status: 'forms-token-cleared' });
+    await clearing;
+
+    expect(component.lastInstalledExpiry).toBeNull();
+    expect(component.renewalRetryUsed).toBe(false);
+  });
+
+  it('runs a later clear again after an earlier one finished', async () => {
+    const { component, frame, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    const first = component.clearToken();
+    await settle();
+    fromForms({ status: 'forms-token-cleared' });
+    await first;
+
+    // The next user's token session, then their sign-out.
+    fromForms({ status: 'forms-auth-failed' });
+    await settle();
+    frame.postMessage.mockClear();
+    const second = component.clearToken();
+    await settle();
+
+    expect(second).not.toBe(first);
+    expect(frame.postMessage).toHaveBeenCalledWith({ status: 'forms-clear-token' }, FORMS);
+    fromForms({ status: 'forms-token-cleared' });
+    await second;
     component.clearRenewalTimer();
   });
 

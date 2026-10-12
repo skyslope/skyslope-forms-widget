@@ -72,13 +72,9 @@ const FORMS_CLEAR_FRAGMENT = 'forms-clear=1';
 
 // Ask the host for a fresh token this long before the current one expires.
 //
-// This has to land inside a specific window, and renewing EARLIER is not safer — it is useless.
-// The token exchange caches one internal token per user and serves it to every exchange request
-// until a TTL sweep drops the cache entry five minutes before that token expires. Ask any sooner
-// and the exchange hands back the same token the session is already running on, so the renewal
-// buys nothing. Mongo's TTL monitor runs about once a minute, so an entry due at five minutes
-// out is really gone somewhere between five and four minutes out; three minutes clears that with
-// a full sweep to spare, and still leaves enough runway for the round trip and one retry.
+// Renewing earlier buys nothing: the token exchange serves one cached token per user until a TTL
+// sweep (about once a minute) drops it five minutes before expiry. Three minutes clears that sweep
+// and leaves time for the round trip and one retry.
 const RENEWAL_LEAD_MS = 3 * 60 * 1000;
 
 // How long the host's getToken gets before we call the renewal failed. Without this, a
@@ -122,10 +118,10 @@ export class SsContainerInline {
   // token mode, so browsers whose cookie sign-in works never get one.
   private token: string | null = null;
 
-  // True once Forms reported its cookie sign-in failed (Safari's third-party-cookie wall, say) and
-  // the host has a getToken. Only then are tokens fetched and sent. Also stops a second wall from
-  // reloading again, which would loop. Also set when the frame shows it is already on a widget token
-  // session (after a host reload or a remount, Forms restores that session from the frame's storage).
+  // True while the frame runs on a token session: set when Forms hits the cookie wall and the host
+  // has a getToken, or when Forms reports a session restored from a widget token (after a host
+  // reload or a remount). Only then are tokens fetched and sent. A second cookie wall in this mode
+  // is reported instead of reloading again, which would loop.
   private tokenMode = false;
 
   // True after the user signed out inside Forms or DigiSign, or the host called clearToken(). Until the
@@ -345,7 +341,7 @@ export class SsContainerInline {
   // back already past its renewal point. Check on the way in rather than trusting the timer.
   private handleVisibilityChange = (): void => {
     if (document.visibilityState !== 'visible') return;
-    if (!this.tokenMode || this.renewalDueAt == null) return;
+    if (this.renewalDueAt == null) return;
     if (Date.now() >= this.renewalDueAt) void this.renewNow();
   };
 

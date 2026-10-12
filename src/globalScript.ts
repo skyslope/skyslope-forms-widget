@@ -80,8 +80,9 @@ export class SkySlopeWidget {
     await this._refreshCallback?.();
   };
   // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
-  // switches users. Resolves once the frame's reload without a token has started (after a DigiSign
-  // clear, once Forms has loaded). A no-op until an inline container is mounted.
+  // switches users. Resolves once the frame's reload without a token has started (when DigiSign
+  // answered the clear, or nothing did, once Forms has loaded). A no-op until an inline container
+  // is mounted.
   clearToken = async (): Promise<void> => {
     await this._clearTokenCallback?.();
   };
