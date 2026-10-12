@@ -44,6 +44,7 @@ const DIGISIGN_CLEAR_TOKEN = 'digisign-clear-token';
 const DIGISIGN_TOKEN_CLEARED = 'digisign-token-cleared';
 // DigiSign -> widget: it gave up waiting for a token.
 const DIGISIGN_AUTH_FAILED = 'digisign-auth-failed';
+const DIGISIGN_SIGNED_OUT = 'digisign-signed-out';
 
 // Which app is in our frame. Its URL is another origin we cannot read, so we go by which app
 // last sent us a message.
@@ -111,8 +112,8 @@ export class SsContainerInline {
    * dead-ending. reason is 'token-callback-failed' when the host getToken callback throws or
    * times out, 'iframe-auth-failed' when Forms or DigiSign reports it could not sign in inside
    * the iframe, 'token-renewal-failed' when a renewal could not be completed
-   * before the current token ran out, and 'signed-out' when the user signed out inside Forms
-   * during a token session.
+   * before the current token ran out, and 'signed-out' when the user signed out inside Forms or
+   * DigiSign during a token session.
    */
   @Event({ bubbles: true, composed: true }) authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
@@ -144,9 +145,9 @@ export class SsContainerInline {
   // expiresAt, which starts out as the expiry of a token we sent.
   private lastInstalledExpiry: number | null = null;
 
-  // Resolves the wait in clearToken() when the app in the frame confirms the clear. Null when no
-  // clear is waiting.
-  private resolveClearWait: (() => void) | null = null;
+  // Resolves the wait in clearToken() with the app that confirmed the clear. Null when no clear is
+  // waiting.
+  private resolveClearWait: ((app: FrameApp) => void) | null = null;
 
   // Bumped whenever the token session ends: the host's clearToken(), a sign-out inside Forms, or
   // unmount. Token work that awaits the host records it first and stops if it changed, so a token
@@ -421,23 +422,25 @@ export class SsContainerInline {
   private runClear = async (): Promise<void> => {
     const generation = this.endTokenSession();
 
-    const askedApp = await this.askFrameToClear();
+    const answeredBy = await this.askFrameToClear();
     // Unmounted while waiting: there is no frame left to reload.
     if (generation !== this.sessionGeneration) return;
-    if (askedApp === 'digisign') {
-      // DigiSign dropped its own session, but the Forms session it was handed off from is still
-      // stored in this frame and would sign the old user back in. Load Forms with the fragment
-      // that makes it drop that session as it starts, and wait for that load, so the host's own
-      // reload after clearToken() cannot cut it short.
-      this.frameApp = 'forms';
-      const iframe = this.iframe();
-      const loaded = iframe != null ? this.waitForFrameLoad(iframe) : Promise.resolve();
-      this.loadFrame(true);
-      await loaded;
+    // Whatever was in the frame, Forms is loaded next.
+    this.frameApp = 'forms';
+    if (answeredBy === 'forms') {
+      // Forms dropped its session. Reload without a token. Anything still running in the old page
+      // goes away with it.
+      this.loadFrame();
       return;
     }
-    // Reload without a token. Anything still running in the old page goes away with it.
-    this.loadFrame();
+    // DigiSign answered, or nothing did (an app still loading, such as DigiSign mid hand-off). The
+    // Forms session DigiSign was handed off from can still be stored in this frame and would sign
+    // the old user back in. Load Forms with the fragment that makes it drop that session as it
+    // starts, and wait for that load, so the host's own reload after clearToken() cannot cut it short.
+    const iframe = this.iframe();
+    const loaded = iframe != null ? this.waitForFrameLoad(iframe) : Promise.resolve();
+    this.loadFrame(true);
+    await loaded;
   };
 
   // Resolves when the frame finishes its next load, or after CLEAR_WAIT_MS. Never rejects.
@@ -493,33 +496,35 @@ export class SsContainerInline {
     this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
-  // The user signed out inside Forms, which already dropped its session. Stop renewing, and leave
-  // the frame where it is: a reload would hit the cookie wall and sign the user straight back in.
+  // The user signed out inside Forms or DigiSign, which already dropped its session. Stop renewing
+  // and hand out no more tokens (a later token ask is refused until the cookie wall starts a new
+  // sign-in), and leave the frame where it is: a reload would sign the user straight back in.
   private handleSignedOut(): void {
     if (!this.tokenMode) return;
     this.endTokenSession();
     this.authError.emit({ reason: 'signed-out' });
   }
 
-  // Ask whichever app is in the frame to clear its session (forms-clear-token or
-  // digisign-clear-token, to that app's exact origin) and wait for its answer, or give up after a
-  // short timeout. Resolves with the app that was asked. Never rejects.
-  private askFrameToClear(): Promise<FrameApp> {
-    const askedApp = this.frameApp;
+  // Ask the app in the frame to clear its session and wait for its answer, or give up after a short
+  // timeout. Resolves with the app that answered, or null when none did. Never rejects.
+  // The ask goes to both apps, each to its exact origin, and the browser drops the one whose origin
+  // does not match the page in the frame. frameApp alone is not enough: it still says Forms while
+  // Forms hands the frame to DigiSign, until DigiSign's first message.
+  private askFrameToClear(): Promise<FrameApp | null> {
     return new Promise(resolve => {
-      const done = () => {
+      const done = (app: FrameApp | null) => {
         clearTimeout(timer);
         this.resolveClearWait = null;
-        resolve(askedApp);
+        resolve(app);
       };
-      const timer = setTimeout(done, CLEAR_WAIT_MS);
+      const timer = setTimeout(() => done(null), CLEAR_WAIT_MS);
       this.resolveClearWait = done;
       if (this.iframe()?.contentWindow == null) {
-        done();
+        done(null);
         return;
       }
-      // If DigiSign is in the frame, it holds the session to clear.
-      this.postToFrame(askedApp, { status: CLEAR_TOKEN_STATUS[askedApp] });
+      this.postToFrame('forms', { status: CLEAR_TOKEN_STATUS.forms });
+      this.postToFrame('digisign', { status: CLEAR_TOKEN_STATUS.digisign });
     });
   }
 
@@ -527,10 +532,7 @@ export class SsContainerInline {
   // our own frame (another window on that origin, a second Forms tab say, must not drive this
   // widget's auth), and may only send its own statuses, so DigiSign cannot start the Forms fallback.
   private handleMessage = (event: MessageEvent) => {
-    // Forms wins when both apps share an origin (a local setup).
-    const app: FrameApp | null =
-      event.origin === this.formsOrigin() ? 'forms' : event.origin === this.digisignOrigin() ? 'digisign' : null;
-    if (app == null) return;
+    if (event.origin !== this.formsOrigin() && event.origin !== this.digisignOrigin()) return;
     const frameWindow = this.iframe()?.contentWindow;
     if (frameWindow == null || event.source !== frameWindow) return;
     let data: FrameMessage;
@@ -539,7 +541,18 @@ export class SsContainerInline {
     } catch {
       return;
     }
-    if (typeof data?.status !== 'string' || !data.status.startsWith(`${app}-`)) return;
+    if (typeof data?.status !== 'string') return;
+    // The status prefix names the app, and the message must come from that app's origin. Going by
+    // the prefix rather than the origin still works when both apps share an origin (a local setup).
+    const app: FrameApp | null = data.status.startsWith('forms-')
+      ? 'forms'
+      : data.status.startsWith('digisign-')
+        ? 'digisign'
+        : null;
+    if (app == null || event.origin !== (app === 'digisign' ? this.digisignOrigin() : this.formsOrigin())) return;
+    // The other app has its own session, so its next install answer is not a renewal of the last
+    // app's session. Let that answer set a fresh baseline.
+    if (app !== this.frameApp) this.lastInstalledExpiry = null;
     this.frameApp = app;
     switch (data.status) {
       case FORMS_AUTH_FAILED:
@@ -549,6 +562,7 @@ export class SsContainerInline {
         this.handleSessionExpiry(data);
         break;
       case FORMS_SIGNED_OUT:
+      case DIGISIGN_SIGNED_OUT:
         this.handleSignedOut();
         break;
       case DIGISIGN_AUTH_REQUIRED:
@@ -563,7 +577,7 @@ export class SsContainerInline {
         break;
       case FORMS_TOKEN_CLEARED:
       case DIGISIGN_TOKEN_CLEARED:
-        this.resolveClearWait?.();
+        this.resolveClearWait?.(app);
         break;
     }
   };

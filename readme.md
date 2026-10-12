@@ -134,18 +134,17 @@ time until your token itself changes; the session still renews from it.
 The Forms app hands the user off to DigiSign (the envelope builder) by moving the iframe to
 DigiSign. When the fallback is active, DigiSign cannot sign in by cookie either, so it asks the
 widget for a token; the widget calls `getToken` and hands the token to DigiSign the same way, and
-renewals and `clearToken()` then go to whichever app is in the frame. This needs a DigiSign version
+renewals then go to whichever app is in the frame. This needs a DigiSign version
 that accepts the token handoff. Browsers where cookie sign-in works never take this path.
 
 When your user signs out or you switch to a different user, call
 `await window.skyslope.widget.clearToken()` while the widget is still mounted. The Forms app keeps
 the session it built from your token in its own tab storage, so without this it can outlast your
-sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal,
-asks the Forms app to drop that session, and reloads the iframe without a token; it resolves once
-the reload has started. If the Forms version in use does not confirm within 3 seconds, the widget
-reloads anyway. If DigiSign is in the iframe at the time, `clearToken()` asks DigiSign to drop its
-session, then loads Forms with an instruction to drop the session it still keeps, and resolves once
-that load has finished (again within about 3 seconds).
+sign-out, even across a reload of your page in the same tab. `clearToken()` stops token renewal
+and asks the app in the iframe (Forms or DigiSign) to drop its session. If Forms confirms, the
+widget reloads the iframe without a token and resolves once the reload has started. If DigiSign
+confirms, or nothing confirms within 3 seconds, the widget loads Forms with an instruction to drop
+the session it still keeps, and resolves once that load has finished (again within about 3 seconds).
 
 Order matters. In browsers that block third-party cookies, the reload after `clearToken()` hits the
 same cookie wall and the widget calls `getToken` again. Sign the user out of your app first, so
@@ -189,7 +188,7 @@ of `ss-container-modal`, so `addEventListener` works on either element; in typed
 is declared on `ss-container-inline`. One failure can raise two events: when `getToken` throws or
 times out during the fallback, the widget emits `token-callback-failed` with the error, then
 `iframe-auth-failed` because no token could be handed over. `signed-out` means the user signed out
-inside the Forms app during a token session: Forms has dropped its session and the widget has
+inside the Forms app or DigiSign during a token session: Forms has dropped its session and the widget has
 stopped renewing, so sign the user out of your app or close the widget.
 
 ```javascript

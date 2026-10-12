@@ -323,6 +323,32 @@ describe('ss-container-inline message handling / origin trust', () => {
     expect(emitted).toEqual([]);
   });
 
+  // A local setup can serve both apps from one origin. The status prefix then decides which app
+  // spoke, so DigiSign's messages still count as DigiSign's.
+  it('tells the apps apart by status when both share an origin', () => {
+    const realDigisignUrl = Env.digisignUrl;
+    Env.digisignUrl = Env.formsUrl;
+    try {
+      const { component, emitted } = makeComponent(null);
+      withFrame(component);
+      component.handleMessage(messageEvent('http://localhost:3001', { status: 'digisign-auth-failed' }));
+      expect(component.frameApp).toBe('digisign');
+      expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+      component.handleMessage(messageEvent('http://localhost:3001', { status: 'forms-session-expiry', exp: 1 }));
+      expect(component.frameApp).toBe('forms');
+    } finally {
+      Env.digisignUrl = realDigisignUrl;
+    }
+  });
+
+  it('ignores a Forms status sent from the DigiSign origin', () => {
+    // No getToken, so an accepted forms-auth-failed would raise iframe-auth-failed.
+    const { component, emitted } = makeComponent(null);
+    withFrame(component);
+    component.handleMessage(messageEvent('http://localhost:3000', { status: 'forms-auth-failed' }));
+    expect(emitted).toEqual([]);
+  });
+
   // Renewals and clears go to the app that last spoke. A message we reject must not move that,
   // or a token meant for DigiSign would be sent to the Forms origin (or the other way round).
   it('does not let a rejected message change which app is in the frame', () => {
@@ -928,16 +954,53 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src.startsWith(Env.formsUrl)).toBe(true);
   });
 
-  it('reloads anyway after the timeout when Forms never answers (an older Forms)', async () => {
+  it('loads Forms with the clear fragment after the timeout when no app answers', async () => {
     const { component, iframeEl } = await onTokenPath();
+    iframeEl.addEventListener = jest.fn();
+    iframeEl.removeEventListener = jest.fn();
 
     const clearing = component.clearToken();
-    const ackTimer = pendingTimers.find(t => t.ms === 3000);
-    expect(ackTimer).toBeDefined();
-    ackTimer.fn();
+    // The first 3s timer is the wait for an answer; the second, the wait for the Forms load.
+    pendingTimers.find(t => t.ms === 3000).fn();
+    await Promise.resolve();
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*#forms-clear=1$/); // no token, clear fragment
+    pendingTimers.filter(t => t.ms === 3000)[1].fn();
     await clearing;
+    expect(component.frameApp).toBe('forms');
+  });
 
-    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
+  // Forms has handed the frame to DigiSign, but DigiSign has not spoken yet, so frameApp still says
+  // Forms. The ask must still reach DigiSign, and the reload must still drop the Forms session.
+  it('asks both apps to clear, each at its exact origin', async () => {
+    const { component, postMessage } = await onTokenPath();
+    expect(component.frameApp).toBe('forms');
+
+    const clearing = component.clearToken();
+    expect(postMessage.mock.calls).toEqual([
+      [{ status: 'forms-clear-token' }, formsOrigin()],
+      [{ status: 'digisign-clear-token' }, new URL(Env.digisignUrl).origin],
+    ]);
+    tokenCleared(component);
+    await clearing;
+  });
+
+  it('drops the Forms session when DigiSign answers a clear before it ever spoke', async () => {
+    const { component, iframeEl } = await onTokenPath();
+    iframeEl.addEventListener = jest.fn();
+    iframeEl.removeEventListener = jest.fn();
+
+    const clearing = component.clearToken();
+    component.handleMessage({
+      origin: new URL(Env.digisignUrl).origin,
+      source: iframeEl.contentWindow,
+      data: { status: 'digisign-token-cleared' },
+    } as MessageEvent);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(iframeEl.src.endsWith('#forms-clear=1')).toBe(true);
+    pendingTimers.filter(t => t.ms === 3000)[1].fn();
+    await clearing;
+    expect(component.frameApp).toBe('forms');
   });
 
   it('ignores a forms-token-cleared message from another origin', async () => {
@@ -1099,7 +1162,7 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     const first = component.clearToken();
     const second = component.clearToken();
     expect(second).toBe(first);
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledTimes(2); // one ask to each app
 
     tokenCleared(component);
     await Promise.all([first, second]);
@@ -1255,6 +1318,37 @@ describe('ss-container-inline DigiSign hand-off', () => {
 
     expect(getToken).not.toHaveBeenCalled();
     expect(frame.postMessage).not.toHaveBeenCalled();
+    component.clearRenewalTimer();
+  });
+
+  // Back in Forms after DigiSign. DigiSign's answer set the baseline, and the exchange caches one
+  // token per user, so Forms can answer its first renewal with the same expiry. That is Forms'
+  // first answer, not a renewal of DigiSign's session that gained nothing.
+  it('starts a fresh renewal baseline when the other app takes over the frame', async () => {
+    const { component, emitted, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    fromDigisign({ status: 'digisign-token-installed', ok: true, exp });
+
+    fromForms({ status: 'forms-session-expiry', exp });
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+
+    expect(component.renewalRetryUsed).toBe(false); // not counted as a failed renewal
+    expect(component.lastInstalledExpiry).toBe(exp * 1000);
+    expect(emitted).toEqual([]);
+    component.clearRenewalTimer();
+  });
+
+  it('still treats a same-app answer with no gain as a failed renewal', async () => {
+    const { component, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+    fromForms({ status: 'forms-token-installed', ok: true, exp });
+
+    expect(component.renewalRetryUsed).toBe(true);
     component.clearRenewalTimer();
   });
 
@@ -1439,6 +1533,29 @@ describe('ss-container-inline DigiSign hand-off', () => {
 
     expect(component.lastInstalledExpiry).toBe(sessionExp * 1000);
     component.clearRenewalTimer();
+  });
+
+  it('stops renewing and refuses DigiSign more tokens when the user signs out inside DigiSign', async () => {
+    const getToken = jest.fn(() => jwtExpiringIn(3600));
+    const { component, emitted, frame, fromDigisign } = framed(getToken);
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    emitted.length = 0;
+    getToken.mockClear();
+    frame.postMessage.mockClear();
+
+    fromDigisign({ status: 'digisign-signed-out' });
+
+    expect(emitted).toEqual([{ reason: 'signed-out' }]);
+    expect(component.tokenMode).toBe(false);
+    expect(component.renewalTimer).toBeNull();
+
+    // A reload of the DigiSign page asks again: no token for it now.
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    expect(getToken).not.toHaveBeenCalled();
+    expect(frame.postMessage).not.toHaveBeenCalled();
   });
 
   it('does not let DigiSign send Forms statuses', async () => {
