@@ -613,7 +613,12 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
-    if (!this.loadFrame()) return;
+    if (!this.loadFrame()) {
+      // The host's widget setup went away while getToken ran, so the token never reached the frame.
+      // Drop it and leave token mode, so a later wall can start the token path again.
+      this.endTokenSession();
+      return;
+    }
     // From here the session lives on a token with a finite life, so start watching it.
     this.scheduleRenewal(this.decodeExpiry(this.token));
   };

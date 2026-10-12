@@ -1016,6 +1016,23 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*$/); // reloaded, no token
   });
 
+  it('leaves token mode when the frame cannot be loaded with the token, so a later wall can retry', async () => {
+    const { component } = makeComponent(() => {
+      // The host tears down its widget setup while getToken runs, so there is no URL to load.
+      delete (window as any).skyslope.widget;
+      return jwtExpiringIn(3600);
+    });
+    const replace = jest.fn();
+    component.iframe = () => ({ src: '', contentWindow: { postMessage: jest.fn(), location: { replace } } });
+
+    await component.handleAuthFailed();
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(component.tokenMode).toBe(false);
+    expect(component.token).toBeNull();
+    expect(component.renewalTimer).toBeNull();
+  });
+
   it('stops renewing and leaves token mode, so the next cookie wall starts the token path for the next user', async () => {
     const { component, emitted, iframeEl } = await onTokenPath();
     expect(component.renewalTimer).not.toBeNull();
