@@ -108,8 +108,9 @@ third-party cookies disabled, blocks those cookies inside the widget's iframe, s
 To support these browsers, pass a `getToken` callback that returns a SkySlope access token for the
 signed-in user. It may return the token or a promise of it, and should return `null` when there is
 no signed-in user. The widget uses it only as a fallback: Forms first loads with cookies, and only
-if it reports that it could not sign in does the widget call `getToken` and reload the iframe with
-the token in the URL fragment. Browsers where cookie sign-in works never call `getToken` and never
+if it reports that it could not sign in, or that it is already signed in from a token, does the
+widget call `getToken`. After a failed cookie sign-in it reloads the iframe with the token in the
+URL fragment. Browsers where cookie sign-in works never call `getToken` and never
 receive a token.
 
 ```javascript
@@ -126,15 +127,16 @@ Once the fallback is active:
   token that is valid for at least the next 5 minutes. A cached token is fine while it has that
   much life left.
 - Each navigation fetches a fresh token from `getToken`.
-- When your token rotates early (an account switch, say), call
-  `await window.skyslope.widget.refreshToken()` to renew at once without a reload.
+- When you get a new token for the same user before the old one expires, call
+  `await window.skyslope.widget.refreshToken()` to renew at once. To switch users, call
+  `clearToken()` (see below).
 - When Forms moves the iframe to DigiSign (the envelope builder), DigiSign asks the widget for a
   token and gets one the same way. Renewals then go to whichever app is in the iframe.
 - If you reload your page or reopen the widget while Forms is still signed in from a token, the
   widget picks the token path back up on its own, so renewals and DigiSign keep working.
 
-These hand-offs need Forms and DigiSign versions that accept them; with older versions
-`refreshToken()` does nothing and the token still refreshes on navigation.
+These hand-offs need Forms and DigiSign versions that support them. With an older DigiSign, the
+envelope builder cannot sign in inside the iframe in cookie-blocking browsers.
 
 #### Signing out or switching users
 

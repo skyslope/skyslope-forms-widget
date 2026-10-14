@@ -1,33 +1,20 @@
 import { Component, Host, h, Env, Element, Event, EventEmitter } from '@stencil/core';
 import reinitializeGlobalScript, { readGetToken } from '../../globalScript';
 
-// Status sent by the embedded Forms app (files-ui PostMessageStatus) when its own
-// authentication fails inside the iframe — e.g. the "third-party cookies disabled"
-// dead end, or a token that expired mid-session and could not be renewed.
+// Forms -> widget: sign-in inside the frame failed (cookies blocked, or the token session ran out).
 const FORMS_AUTH_FAILED = 'forms-auth-failed';
-
-// Sent by the widget TO the Forms app to hand over a fresh token for in-place session
-// renewal (the Forms app imports it without reloading). Paired with a files-ui listener.
+// widget -> Forms: a token to install in place.
 const FORMS_SET_TOKEN = 'forms-set-token';
-
-// Sent back by the Forms app once it has tried to install a token we pushed. Carries the
-// expiry of the token the SESSION ended up with, which is what we re-arm the timer on.
+// Forms -> widget: install result, with the session's expiry.
 const FORMS_TOKEN_INSTALLED = 'forms-token-installed';
-
-// Sent by the widget TO the Forms app when the host signs the user out or switches users, so
-// Forms drops the session it built from our tokens. Paired with a files-ui listener.
+// widget -> Forms: drop the session (host sign-out or user switch).
 const FORMS_CLEAR_TOKEN = 'forms-clear-token';
-
-// Sent back by the Forms app once it has dropped that session.
+// Forms -> widget: session dropped.
 const FORMS_TOKEN_CLEARED = 'forms-token-cleared';
-
-// Sent by the Forms app each time it loads in the frame, with the expiry of the token its
-// session is using. The first sign-in (the #t= reload) gets no forms-token-installed answer, and
-// that session token can expire before the host token we sent, so the first renewal is timed on this.
+// Forms -> widget: session expiry, on each load. Times the first renewal (the #t= sign-in gets no
+// install answer).
 const FORMS_SESSION_EXPIRY = 'forms-session-expiry';
-
-// Sent by the Forms app when the user signed out inside it during a token session. Forms has
-// already dropped the session; the host decides what happens next.
+// Forms -> widget: the user signed out inside Forms.
 const FORMS_SIGNED_OUT = 'forms-signed-out';
 
 // The same token hand-off for the DigiSign sender. Forms hands the user off to DigiSign by
@@ -44,6 +31,7 @@ const DIGISIGN_CLEAR_TOKEN = 'digisign-clear-token';
 const DIGISIGN_TOKEN_CLEARED = 'digisign-token-cleared';
 // DigiSign -> widget: it gave up waiting for a token.
 const DIGISIGN_AUTH_FAILED = 'digisign-auth-failed';
+// DigiSign -> widget: the user signed out inside DigiSign.
 const DIGISIGN_SIGNED_OUT = 'digisign-signed-out';
 
 // Which app is in our frame. Its URL is another origin we cannot read, so we go by which app
@@ -54,7 +42,6 @@ type FrameApp = 'forms' | 'digisign';
 // forms-session-expiry only when Forms is signed in from a widget token.
 type FrameMessage = { status?: string; ok?: boolean; exp?: number; sessionless?: boolean };
 
-// The set-token status each app expects.
 const SET_TOKEN_STATUS: Record<FrameApp, string> = { forms: FORMS_SET_TOKEN, digisign: DIGISIGN_SET_TOKEN };
 
 // A JWT-style exp (seconds) as epoch ms, or null if it is not a usable number.
@@ -85,11 +72,8 @@ const GET_TOKEN_TIMEOUT_MS = 30 * 1000;
 // so wait a little and try once more before telling the host.
 const RENEWAL_RETRY_MS = 30 * 1000;
 
-// A renewal has to move the session's expiry, as Forms (or DigiSign) reports it back, by at least
-// this much. An unchanged expiry would otherwise re-arm at zero delay and spin. The app's answer is
-// judged, not the host token (except that an older app that sends no expiry is judged on the host
-// token's): a host that caches its token hands back the same one, and the exchange still turns it
-// into a fresh session token inside the renewal window.
+// A renewal must move the session expiry the app reports by at least this much; an unchanged expiry
+// would re-arm at zero delay and spin.
 const MIN_EXPIRY_GAIN_MS = 60 * 1000;
 
 // The longest delay setTimeout accepts. A longer one fires at once.
@@ -153,9 +137,7 @@ export class SsContainerInline {
   // waiting.
   private resolveClearWait: ((app: FrameApp) => void) | null = null;
 
-  // Bumped whenever the token session ends: the host's clearToken(), a sign-out inside Forms, or
-  // unmount. Token work that awaits the host records it first and stops if it changed, so a token
-  // fetched before the session ended is never used after it.
+  // Bumped by endTokenSession(). Token work that awaits the host checks it and stops if it changed.
   private sessionGeneration = 0;
 
   // The clear in progress, so a second clearToken() call joins it instead of starting another.
@@ -168,9 +150,13 @@ export class SsContainerInline {
   // The app that last spoke to us from our frame. Renewals go to it.
   private frameApp: FrameApp = 'forms';
 
+  // DigiSign's first sign-in in our frame: 'waiting' after we sent it a token, 'reported' after we
+  // already told the host it failed. Its answer then is not a renewal, and its later
+  // digisign-auth-failed is reported only once.
+  private digisignSignIn: 'waiting' | 'reported' | null = null;
+
   // Read the `exp` claim without verifying the signature. The widget is not the thing that
   // trusts this token — it only needs to know when to go and ask for the next one.
-  // A missing or malformed payload throws and lands in the catch.
   private decodeExpiry(jwt: string): number | null {
     try {
       const payload = jwt.split('.')[1];
@@ -208,8 +194,7 @@ export class SsContainerInline {
     }, delay);
   }
 
-  // Give the host's callback a deadline. A promise that never settles is otherwise
-  // indistinguishable from a host that is simply slow.
+  // Give the host's callback a deadline, so one that never settles is reported.
   private withGetTokenTimeout(pending: Promise<string | null>): Promise<string | null> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('getToken timed out')), GET_TOKEN_TIMEOUT_MS);
@@ -246,7 +231,9 @@ export class SsContainerInline {
   }
 
   // Fetch a fresh token and hand it to the app in the frame in place. Whether it bought more time
-  // is judged on the app's answer (handleTokenInstalled), not on the host token.
+  // is judged on the app's answer (handleTokenInstalled), not on the host token. Runs on our own
+  // timer shortly before expiry, and is exposed to the host as widget.refreshToken() for a token
+  // that rotated early.
   private renewNow = (): Promise<void> => {
     if (this.renewing != null) return this.renewing;
     const renewal = this.runRenewal().finally(() => {
@@ -305,9 +292,18 @@ export class SsContainerInline {
     return new URL(app === 'digisign' ? Env.digisignUrl : Env.formsUrl).origin;
   }
 
-  private handleTokenInstalled(data: FrameMessage): void {
+  private handleTokenInstalled(data: FrameMessage, app: FrameApp): void {
     // A late answer after clearToken() must not restart renewal.
     if (!this.tokenMode) return;
+    const firstDigisignSignIn = app === 'digisign' && this.digisignSignIn === 'waiting';
+    if (firstDigisignSignIn) this.digisignSignIn = null;
+    if (data.ok === false && firstDigisignSignIn) {
+      // DigiSign's first sign-in failed. Nothing to renew or retry; DigiSign's own
+      // digisign-auth-failed tells the host.
+      this.clearRenewalTimer();
+      this.renewalDueAt = null;
+      return;
+    }
     if (data.ok === false) {
       this.handleRenewalFailure();
       return;
@@ -376,10 +372,6 @@ export class SsContainerInline {
 
     const baseUrl = `${Env.formsUrl}${widget.path}`;
     const url = this.addUrlParams(baseUrl, params);
-
-    // Pass the token in the URL fragment (not a query param): fragments are not sent to
-    // the server, and the Forms app strips it from history immediately on read.
-    if (this.token != null) return `${url}#t=${encodeURIComponent(this.token)}`;
     return clearForms ? `${url}#${FORMS_CLEAR_FRAGMENT}` : url;
   }
 
@@ -393,7 +385,8 @@ export class SsContainerInline {
   // the host has set up window.skyslope, rather than loading an empty src.
   private loadFrame(clearForms = false): boolean {
     const iframe = this.iframe();
-    const url = this.getUrl(clearForms);
+    // A token wins over the clear fragment: it starts a new session anyway.
+    const url = this.getUrl(clearForms && this.token == null);
     if (iframe == null || url === '') return false;
     // A URL that carries a token is loaded by navigating the frame's own window. The src attribute
     // stays in the host page's DOM for the whole session, where other scripts and session-replay
@@ -401,7 +394,8 @@ export class SsContainerInline {
     if (this.token != null) {
       // No frame window to navigate: refuse rather than write the token into src.
       if (iframe.contentWindow == null) return false;
-      iframe.contentWindow.location.replace(url);
+      // The token goes in the fragment, which is never sent to the server. Forms strips it on read.
+      iframe.contentWindow.location.replace(`${url}#t=${encodeURIComponent(this.token)}`);
       return true;
     }
     iframe.src = url;
@@ -417,11 +411,6 @@ export class SsContainerInline {
     if (generation !== this.sessionGeneration) return;
     this.loadFrame();
   };
-
-  // Renew the session in place. Exposed to the host as widget.refreshToken() for the case
-  // where its own token rotates early (an account switch, say). The normal renewal, shortly before
-  // expiry, runs on our own timer and needs nothing from the host.
-  private refreshToken = (): Promise<void> => this.renewNow();
 
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
   // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
@@ -482,7 +471,7 @@ export class SsContainerInline {
     this.renewalDueAt = null;
     this.lastInstalledExpiry = null;
     this.renewalRetryUsed = false;
-    this.adoptionBlocked = false;
+    this.digisignSignIn = null;
     // Leave token mode so the next cookie wall can start the token path again, for the next user.
     this.tokenMode = false;
     return generation;
@@ -496,7 +485,7 @@ export class SsContainerInline {
     // restored after a host reload or a remount, without a cookie wall this time. Take it up.
     const adopting = !this.tokenMode;
     if (adopting && !this.adoptTokenSession()) {
-      this.authError.emit({ reason: 'iframe-auth-failed' });
+      this.reportDigisignSignInFailed();
       return;
     }
     const generation = this.sessionGeneration;
@@ -506,9 +495,10 @@ export class SsContainerInline {
     if (this.token == null) {
       // Nothing was sent, so a later cookie wall may start the token path again.
       if (adopting) this.tokenMode = false;
-      this.authError.emit({ reason: 'iframe-auth-failed' });
+      this.reportDigisignSignInFailed();
       return;
     }
+    this.digisignSignIn = 'waiting';
     // DigiSign's answer is a first sign-in, not a renewal: it reports the expiry of its session
     // token, which can match one reported before (the exchange caches one token per user). Let
     // that answer set the baseline instead of being judged as a renewal that gained nothing.
@@ -518,6 +508,19 @@ export class SsContainerInline {
     this.postToFrame('digisign', { status: DIGISIGN_SET_TOKEN, token: this.token });
     this.scheduleRenewal(this.decodeExpiry(this.token));
   };
+
+  // Tell the host DigiSign could not sign in, and skip DigiSign's own digisign-auth-failed that
+  // follows.
+  private reportDigisignSignInFailed(): void {
+    this.digisignSignIn = 'reported';
+    this.authError.emit({ reason: 'iframe-auth-failed' });
+  }
+
+  private handleDigisignAuthFailed(): void {
+    const alreadyReported = this.digisignSignIn === 'reported';
+    this.digisignSignIn = null;
+    if (!alreadyReported) this.authError.emit({ reason: 'iframe-auth-failed' });
+  }
 
   // The user signed out inside Forms or DigiSign, which already dropped its session. Stop renewing
   // and hand out no more tokens (a later token ask is refused until the cookie wall starts a new
@@ -564,7 +567,6 @@ export class SsContainerInline {
   // Messages from the app in our frame. A message is accepted only from our own frame (another
   // window on the same origin, a second Forms tab say, must not drive this widget's auth), and only
   // from the origin of the app its status prefix names, so DigiSign cannot start the Forms fallback.
-  // Going by the prefix also tells the apps apart when both share one origin (a local setup).
   private handleMessage = (event: MessageEvent) => {
     const frameWindow = this.iframe()?.contentWindow;
     if (frameWindow == null || event.source !== frameWindow) return;
@@ -600,11 +602,11 @@ export class SsContainerInline {
         void this.handleDigisignAuthRequired();
         break;
       case DIGISIGN_AUTH_FAILED:
-        this.authError.emit({ reason: 'iframe-auth-failed' });
+        this.handleDigisignAuthFailed();
         break;
       case FORMS_TOKEN_INSTALLED:
       case DIGISIGN_TOKEN_INSTALLED:
-        this.handleTokenInstalled(data);
+        this.handleTokenInstalled(data, app);
         break;
       case FORMS_TOKEN_CLEARED:
       case DIGISIGN_TOKEN_CLEARED:
@@ -613,13 +615,9 @@ export class SsContainerInline {
     }
   };
 
-  // Re-time the next renewal on the session's own expiry. Only the timer moves: this is not a
-  // renewal answer, so it does not set the baseline the next renewal answer is compared against
-  // (Forms sends the same expiry again after reloading inside the frame, and a renewal right after
-  // sign-in may get it back too).
-  // Outside token mode it is ignored, unless Forms says its session came from a widget token
-  // (sessionless): then Forms restored that session after a host reload or a remount, and we take
-  // it up so it keeps renewing. Older Forms, and cookie sessions, never send that flag.
+  // Re-time the next renewal on the session's own expiry. Not a renewal answer, so it does not set
+  // the baseline. Outside token mode, take up the session only when Forms says it came from a
+  // widget token (sessionless).
   private handleSessionExpiry(data: FrameMessage): void {
     // Without an expiry there is nothing to time, so take up no session either: once taken up, a
     // later Forms sign-in failure would no longer switch to the token path.
@@ -651,7 +649,7 @@ export class SsContainerInline {
       return;
     }
     if (!this.loadFrame()) {
-      // The host's widget setup went away while getToken ran, so the token never reached the frame.
+      // The frame or the widget setup went away while getToken ran, so the token never reached the frame.
       // Drop it and leave token mode, so a later wall can start the token path again.
       this.endTokenSession();
       return;
@@ -664,7 +662,7 @@ export class SsContainerInline {
     const { widget } = window.skyslope ?? {};
     widget?.registerReload(this.reloadIframe);
     widget?.registerNavigateTo(this.navigateTo);
-    widget?.registerRefresh(this.refreshToken);
+    widget?.registerRefresh(this.renewNow);
     widget?.registerClearToken(this.clearToken);
     window.addEventListener('message', this.handleMessage);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);

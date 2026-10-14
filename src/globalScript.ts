@@ -1,17 +1,11 @@
 /* eslint-disable @stencil-community/strict-boolean-conditions */
 
-import { ModalProps, SkyslopeConfig } from './window';
+import { GetTokenCallback, ModalProps, SkyslopeConfig } from './window';
 import { SkyslopePaths } from './components/ss-container-inline/types';
 
-export type GetTokenCallback = () => string | null | Promise<string | null>;
-
-// The host's token callback is kept in module scope, NOT as a property of the widget the page
-// can reach. Script running on the host page could already get at the host's own token, so
-// this grants nobody a new capability - but it avoids handing every site that embeds us the
-// same well-known global to call, which is what would make a generic payload worth writing.
+// Kept in module scope so embedding pages get no well-known global to call (see threat model FW-08).
 let storedGetToken: GetTokenCallback | null = null;
 
-// Read by the inline container. Not exposed on window.skyslope.widget.
 export function readGetToken(): GetTokenCallback | null {
   return storedGetToken;
 }
@@ -79,10 +73,8 @@ export class SkySlopeWidget {
   refreshToken = async (): Promise<void> => {
     await this._refreshCallback?.();
   };
-  // Make the embedded Forms app forget the signed-in user, e.g. when the host signs them out or
-  // switches users. Resolves once the frame's reload without a token has started (when DigiSign
-  // answered the clear, or nothing did, once Forms has loaded). A no-op until an inline container
-  // is mounted.
+  // Make the frame forget the user (host sign-out or user switch). Resolves once the reload without
+  // a token has started. Does nothing until an inline container is mounted.
   clearToken = async (): Promise<void> => {
     await this._clearTokenCallback?.();
   };
