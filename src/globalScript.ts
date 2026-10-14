@@ -1,6 +1,6 @@
 /* eslint-disable @stencil-community/strict-boolean-conditions */
 
-import { GetTokenCallback, ModalProps, SkyslopeConfig } from './window';
+import type { GetTokenCallback, ModalProps, SkyslopeConfig } from './window';
 import { SkyslopePaths } from './components/ss-container-inline/types';
 
 // Kept in module scope so embedding pages get no well-known global to call (see threat model FW-08).
