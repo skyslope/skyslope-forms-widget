@@ -42,8 +42,6 @@ type FrameApp = 'forms' | 'digisign';
 // forms-session-expiry only when Forms is signed in from a widget token.
 type FrameMessage = { status?: string; ok?: boolean; exp?: number; sessionless?: boolean };
 
-const SET_TOKEN_STATUS: Record<FrameApp, string> = { forms: FORMS_SET_TOKEN, digisign: DIGISIGN_SET_TOKEN };
-
 // A JWT-style exp (seconds) as epoch ms, or null if it is not a usable number.
 function expToMs(exp: unknown): number | null {
   return typeof exp === 'number' && isFinite(exp) ? exp * 1000 : null;
@@ -147,7 +145,8 @@ export class SsContainerInline {
   // renewal would read the first one's answer as a renewal that gained nothing.
   private renewing: Promise<void> | null = null;
 
-  // The app that last spoke to us from our frame. Renewals go to it.
+  // The app that last spoke to us from our frame. It can be out of date: Forms may load again
+  // without saying anything, so renewals do not rely on it.
   private frameApp: FrameApp = 'forms';
 
   // DigiSign's first sign-in in our frame: 'waiting' after we sent it a token, 'reported' after we
@@ -258,14 +257,21 @@ export class SsContainerInline {
     }
 
     const nextExpiry = this.decodeExpiry(this.token);
-    // A renewal goes to whichever app is in the frame now.
-    this.postToFrame(this.frameApp, { status: SET_TOKEN_STATUS[this.frameApp], token: this.token });
+    // Sent to both apps, each at its exact origin. The browser drops the copy whose origin does not
+    // match the page in the frame, so only the app in the frame gets it and answers.
+    this.postToFrame('forms', { status: FORMS_SET_TOKEN, token: this.token });
+    this.postToFrame('digisign', { status: DIGISIGN_SET_TOKEN, token: this.token });
     // Arm on what we can see for now. Forms answers with the expiry of the token the session
     // actually ended up using — after an exchange that can differ — and we re-arm on that. A host
     // that caches its token can hand back one that is itself inside the lead window, so wait at
     // least a retry interval rather than renewing again at once while Forms answers.
     this.scheduleRenewal(nextExpiry, RENEWAL_RETRY_MS);
   };
+
+  private stopRenewal(): void {
+    this.clearRenewalTimer();
+    this.renewalDueAt = null;
+  }
 
   private handleRenewalFailure(): void {
     this.clearRenewalTimer();
@@ -299,9 +305,8 @@ export class SsContainerInline {
     if (firstDigisignSignIn) this.digisignSignIn = null;
     if (data.ok === false && firstDigisignSignIn) {
       // DigiSign's first sign-in failed. Nothing to renew or retry; DigiSign's own
-      // digisign-auth-failed tells the host.
-      this.clearRenewalTimer();
-      this.renewalDueAt = null;
+      // digisign-auth-failed tells the host (before or after this answer).
+      this.stopRenewal();
       return;
     }
     if (data.ok === false) {
@@ -517,9 +522,14 @@ export class SsContainerInline {
   }
 
   private handleDigisignAuthFailed(): void {
-    const alreadyReported = this.digisignSignIn === 'reported';
-    this.digisignSignIn = null;
-    if (!alreadyReported) this.authError.emit({ reason: 'iframe-auth-failed' });
+    if (this.digisignSignIn === 'reported') {
+      this.digisignSignIn = null;
+      return;
+    }
+    // DigiSign gave up waiting while its import may still run. Stop the renewal armed for it, and
+    // stay 'waiting' so a late install answer still counts as the sign-in's, not a renewal's.
+    if (this.digisignSignIn === 'waiting') this.stopRenewal();
+    this.authError.emit({ reason: 'iframe-auth-failed' });
   }
 
   // The user signed out inside Forms or DigiSign, which already dropped its session. Stop renewing

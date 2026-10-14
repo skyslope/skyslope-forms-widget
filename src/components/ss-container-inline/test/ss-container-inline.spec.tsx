@@ -56,6 +56,18 @@ function makeComponent(getToken: GetToken | null): {
   return { component, emitted, iframeEl };
 }
 
+// A renewal posts the token to both apps, each at its exact origin; the browser delivers only the
+// copy whose origin matches the page in the frame. Returns the token sent.
+function expectRenewalPosted(postMessage: jest.Mock): string {
+  expect(postMessage.mock.calls).toHaveLength(2);
+  const [[toForms, formsOrigin], [toDigisign, digisignOrigin]] = postMessage.mock.calls;
+  expect(toForms).toEqual({ status: 'forms-set-token', token: expect.any(String) });
+  expect(formsOrigin).toBe('http://localhost:3001');
+  expect(toDigisign).toEqual({ status: 'digisign-set-token', token: toForms.token });
+  expect(digisignOrigin).toBe('http://localhost:3000');
+  return toForms.token;
+}
+
 // Let a few rounds of promise callbacks run, so async handlers reach their next await.
 async function settle() {
   for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -180,7 +192,7 @@ describe('ss-container-inline renewNow (host refreshToken)', () => {
     delete (window as any).skyslope;
   });
 
-  it('posts a fresh token to the Forms origin instead of the URL', async () => {
+  it('posts a fresh token to the app origins instead of the URL', async () => {
     let calls = 0;
     const { component } = makeComponent(() => `token-${++calls}`);
     const postMessage = jest.fn();
@@ -189,11 +201,7 @@ describe('ss-container-inline renewNow (host refreshToken)', () => {
 
     await component.renewNow();
 
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage).toHaveBeenCalledWith(
-      { status: 'forms-set-token', token: 'token-2' },
-      'http://localhost:3001' // Env.formsUrl origin in spec
-    );
+    expect(expectRenewalPosted(postMessage)).toBe('token-2');
   });
 
   // A host that configured getToken but whose user signed in with cookies (Chrome, say) never
@@ -528,7 +536,7 @@ describe('ss-container-inline renewal scheduling', () => {
     expect(component.renewalTimer).toBeNull();
   });
 
-  it('renews by posting forms-set-token to the Forms origin, never by reloading', async () => {
+  it('renews by posting set-token to each app origin, never by reloading', async () => {
     let call = 0;
     const { component, iframeEl } = makeComponent(() => (++call === 1 ? jwtExpiringIn(3600, 'first') : jwtExpiringIn(7200, 'second')));
     const postMessage = jest.fn();
@@ -540,14 +548,10 @@ describe('ss-container-inline renewal scheduling', () => {
 
     await component.renewNow();
 
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    const [payload, targetOrigin] = postMessage.mock.calls[0];
-    expect(payload.status).toBe('forms-set-token');
-    expect(payload.token).toBe(component.token);
+    const sent = expectRenewalPosted(postMessage);
+    expect(sent).toBe(component.token);
     // The replacement really is a different token, not the sign-in one re-sent.
-    expect(payload.token).not.toBe(firstToken);
-    // The token must go to the exact Forms origin. A '*' target would hand it to any listener.
-    expect(targetOrigin).toBe('http://localhost:3001');
+    expect(sent).not.toBe(firstToken);
     // Renewal is in place: the frame was not navigated again, so form state survives.
     expect(iframeEl.navigatedTo).toBe(loadedAtSignIn);
     expect(iframeEl.src).toBe('');
@@ -677,7 +681,7 @@ describe('ss-container-inline renewal scheduling', () => {
     await Promise.all([fromTimer, fromVisibility]);
 
     expect(call).toBe(2);
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expectRenewalPosted(postMessage);
     expect(emitted).toEqual([]);
   });
 
@@ -711,8 +715,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
     await component.renewNow();
 
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage.mock.calls[0][0]).toEqual({ status: 'forms-set-token', token: cached });
+    expect(expectRenewalPosted(postMessage)).toBe(cached);
 
     // Forms reports the fresh session token's later expiry: renewed, re-armed on it.
     component.handleTokenInstalled({ ok: true, exp: sessionExp + 3600 });
@@ -731,7 +734,7 @@ describe('ss-container-inline renewal scheduling', () => {
 
     await component.renewNow();
 
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expectRenewalPosted(postMessage);
     expect(renewalDelay(component)).toBe(30_000);
     component.clearRenewalTimer();
   });
@@ -787,7 +790,7 @@ describe('ss-container-inline renewal scheduling', () => {
     postMessage.mockClear();
 
     await component.renewNow();
-    expect(postMessage).toHaveBeenCalledTimes(1);
+    expectRenewalPosted(postMessage);
     component.handleTokenInstalled({ ok: true, exp: sessionExp });
 
     expect(component.renewalRetryUsed).toBe(false);
@@ -847,8 +850,7 @@ describe('ss-container-inline renewal scheduling', () => {
       expect(getToken).not.toHaveBeenCalled(); // no token until the renewal is due
 
       await component.renewNow();
-      expect(frame.postMessage).toHaveBeenCalledTimes(1);
-      expect(frame.postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+      expectRenewalPosted(frame.postMessage);
       expect(emitted).toEqual([]);
       component.clearRenewalTimer();
     });
@@ -928,8 +930,7 @@ describe('ss-container-inline renewal scheduling', () => {
     next = jwtExpiringIn(3700, 'second'); // later than the last host token, earlier than the session
     await component.renewNow();
 
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+    expectRenewalPosted(postMessage);
   });
 
   it('stops a renewal that was waiting on getToken when the container went away', async () => {
@@ -1010,8 +1011,7 @@ describe('ss-container-inline renewal scheduling', () => {
     // The retry timer fires: a new token goes to Forms.
     timers.find(t => t.id === component.renewalTimer).fn();
     await settle();
-    expect(postMessage).toHaveBeenCalledTimes(1);
-    expect(postMessage.mock.calls[0][0].status).toBe('forms-set-token');
+    expectRenewalPosted(postMessage);
 
     // That renewal worked, so the next failure gets its own retry instead of reporting at once.
     component.handleTokenInstalled({ ok: true, exp: Math.floor(Date.now() / 1000) + 7200 });
@@ -1666,23 +1666,62 @@ describe('ss-container-inline DigiSign hand-off', () => {
     component.clearRenewalTimer();
   });
 
-  it('sends renewals to whichever app spoke last', async () => {
+  // What the page at this origin would receive: the browser drops posts aimed at another origin.
+  function deliveredTo(frame: { postMessage: jest.Mock }, origin: string) {
+    return frame.postMessage.mock.calls.filter(([, target]) => target === origin).map(([message]) => message.status);
+  }
+
+  it('renews DigiSign while it is in the frame', async () => {
     let n = 0;
-    const { component, frame, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600 + 600 * ++n));
+    const { component, frame, fromDigisign } = framed(() => jwtExpiringIn(3600 + 600 * ++n));
     await component.handleAuthFailed();
     fromDigisign({ status: 'digisign-auth-required' });
     await settle();
+    fromDigisign({ status: 'digisign-token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 });
     frame.postMessage.mockClear();
 
     await component.renewNow();
-    expect(frame.postMessage.mock.calls[0][0].status).toBe('digisign-set-token');
-    expect(frame.postMessage.mock.calls[0][1]).toBe(DS);
 
-    fromForms({ status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 });
+    expect(deliveredTo(frame, DS)).toEqual(['digisign-set-token']);
+    component.clearRenewalTimer();
+  });
+
+  // DigiSign hands the frame back to Forms, and Forms loads without sending forms-session-expiry
+  // (its expiry lookup timed out, or its token ran out while the user was in DigiSign).
+  it('still renews Forms when the frame went back to it without a word', async () => {
+    let n = 0;
+    const { component, emitted, frame, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600 + 600 * ++n));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    const digisignExp = Math.floor(Date.now() / 1000) + 3600;
+    fromDigisign({ status: 'digisign-token-installed', ok: true, exp: digisignExp });
     frame.postMessage.mockClear();
+
     await component.renewNow();
-    expect(frame.postMessage.mock.calls[0][0].status).toBe('forms-set-token');
-    expect(frame.postMessage.mock.calls[0][1]).toBe(FORMS);
+
+    expect(deliveredTo(frame, FORMS)).toEqual(['forms-set-token']);
+    // Forms answers. Its session is not DigiSign's, so its answer sets a fresh baseline.
+    fromForms({ status: 'forms-token-installed', ok: true, exp: digisignExp });
+    expect(component.lastInstalledExpiry).toBe(digisignExp * 1000);
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(emitted).toEqual([]);
+    component.clearRenewalTimer();
+  });
+
+  it('judges a Forms answer as a renewal while DigiSign never answered its first token', async () => {
+    const { component, emitted, fromDigisign, fromForms } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    // The frame is back on Forms before DigiSign answered.
+    await component.renewNow();
+
+    fromForms({ status: 'forms-token-installed', ok: false });
+
+    expect(component.renewalRetryUsed).toBe(true);
+    expect(component.renewalTimer).not.toBeNull();
+    expect(emitted).toEqual([]);
     component.clearRenewalTimer();
   });
 
@@ -1801,6 +1840,46 @@ describe('ss-container-inline DigiSign hand-off', () => {
     fromDigisign({ status: 'digisign-token-installed', ok: false });
 
     expect(component.renewalRetryUsed).toBe(true);
+    component.clearRenewalTimer();
+  });
+
+  // DigiSign's 35 s wait can run out while its import is still going, so digisign-auth-failed can
+  // come before the install answer, or with none at all.
+  it('reports once and stops renewing when DigiSign gives up before its install answer', async () => {
+    const { component, emitted, frame, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    frame.postMessage.mockClear();
+
+    fromDigisign({ status: 'digisign-auth-failed' });
+
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+    expect(component.renewalTimer).toBeNull();
+    expect(component.renewalDueAt).toBeNull();
+
+    // The import finishes late and failed: still the sign-in's answer, not a renewal miss.
+    fromDigisign({ status: 'digisign-token-installed', ok: false });
+
+    expect(component.renewalRetryUsed).toBe(false);
+    expect(component.renewalTimer).toBeNull();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+    expect(frame.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('starts renewing when DigiSign installs late, after giving up', async () => {
+    const { component, emitted, fromDigisign } = framed(() => jwtExpiringIn(3600));
+    await component.handleAuthFailed();
+    fromDigisign({ status: 'digisign-auth-required' });
+    await settle();
+    fromDigisign({ status: 'digisign-auth-failed' });
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+
+    fromDigisign({ status: 'digisign-token-installed', ok: true, exp });
+
+    expect(component.lastInstalledExpiry).toBe(exp * 1000);
+    expect(component.renewalTimer).not.toBeNull();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
     component.clearRenewalTimer();
   });
 
