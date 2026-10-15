@@ -437,7 +437,7 @@ export class SsContainerInline {
     // Whatever was in the frame, Forms is loaded next.
     this.frameApp = 'forms';
     if (answeredBy === 'forms') {
-      // Forms dropped its session. Reload without a token. Anything still running in the old page
+      // Forms confirmed it dropped its session. Reload without a token. Anything still running in the old page
       // goes away with it.
       this.loadFrame();
       return;
@@ -620,7 +620,9 @@ export class SsContainerInline {
         break;
       case FORMS_TOKEN_CLEARED:
       case DIGISIGN_TOKEN_CLEARED:
-        this.resolveClearWait?.(app);
+        // ok:false means the app may still hold the session: treat it as no answer, so Forms is
+        // reloaded with the fragment that drops it.
+        this.resolveClearWait?.(data.ok === false ? null : app);
         break;
     }
   };

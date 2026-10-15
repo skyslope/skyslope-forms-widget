@@ -1222,6 +1222,25 @@ describe('ss-container-inline clearToken (host sign-out or user switch)', () => 
     expect(iframeEl.src.startsWith(Env.formsUrl)).toBe(true);
   });
 
+  it('loads Forms with the clear fragment when Forms answers that the clear failed', async () => {
+    const { component, iframeEl } = await onTokenPath();
+    iframeEl.addEventListener = jest.fn();
+    iframeEl.removeEventListener = jest.fn();
+
+    const clearing = component.clearToken();
+    component.handleMessage({
+      origin: formsOrigin(),
+      source: iframeEl.contentWindow,
+      data: { status: 'forms-token-cleared', ok: false },
+    } as MessageEvent);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(iframeEl.src).toMatch(/^http:\/\/localhost:3001\/[^#]*#forms-clear=1$/); // no token, clear fragment
+    pendingTimers.filter(t => t.ms === 3000)[1].fn();
+    await clearing;
+    expect(component.frameApp).toBe('forms');
+  });
+
   it('loads Forms with the clear fragment after the timeout when no app answers', async () => {
     const { component, iframeEl } = await onTokenPath();
     iframeEl.addEventListener = jest.fn();
