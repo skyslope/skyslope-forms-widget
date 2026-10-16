@@ -37,7 +37,21 @@ export interface SkyslopeConfig {
   idp?: string | null;
   openInline?: boolean;
   headerVariant?: string | null;
+  /**
+   * Optional callback that returns a SkySlope access token for the current user.
+   * When provided, the widget passes the token to the embedded Forms app (in the iframe URL
+   * fragment for the first sign-in, by postMessage for renewals and for DigiSign) so it can
+   * authenticate without third-party cookies. This is what lets the widget work in Safari (and
+   * other cookie-blocking browsers). Called only on the token path: after Forms reports its cookie
+   * sign-in failed, or when the frame is already signed in from a widget token (after a host reload
+   * or remount). May be sync or async. Returning null on the first sign-in raises authError on
+   * the container; during a renewal it is retried once before authError. Passing null
+   * here is the same as leaving getToken out.
+   */
+  getToken?: GetTokenCallback | null;
 }
+
+export type GetTokenCallback = () => string | null | Promise<string | null>;
 
 declare global {
   interface Window {
