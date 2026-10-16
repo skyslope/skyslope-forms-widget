@@ -5,21 +5,36 @@ on:
     branches:
       - main  # Run on pushes to the main branch
 
+permissions:
+  contents: write       # push the release commit and tag, create the GitHub release
+  issues: write         # comment on released issues
+  pull-requests: write  # comment on released pull requests
+
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # The org IP allow list blocks GitHub-hosted runners from pushing here, and
+    # this public repository can use only the public-release runner group,
+    # which GitHub restricts to this workflow on main.
+    runs-on:
+      group: public-release
+      labels: skyslope-public-release
+    # Holds NPM_TOKEN. Limited to main, with a required reviewer.
+    environment: release
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+        env:
+          # This job doesn't launch a browser, and Puppeteer 19 has no Linux ARM64 Chromium to download.
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
 
       - name: Build project
         run: npm run build:prod
