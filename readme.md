@@ -99,6 +99,105 @@ If you are not using SSO, you can initialize the widget without an IDP:
 </script>
 ```
 
+### Safari and cookie-free authentication (`getToken`)
+
+By default the embedded Forms app signs the user in with cookies. Safari, and any browser with
+third-party cookies disabled, blocks those cookies inside the widget's iframe, so the user sees a
+"third-party cookies are disabled" message instead of Forms.
+
+To support these browsers, pass a `getToken` callback that returns a SkySlope access token for the
+signed-in user. It may return the token or a promise of it, and should return `null` when there is
+no signed-in user. The widget uses it only as a fallback: Forms first loads with cookies, and only
+if it reports that it could not sign in, or that it is already signed in from a token, does the
+widget call `getToken`. After a failed cookie sign-in it reloads the iframe with the token in the
+URL fragment. Browsers where cookie sign-in works never call `getToken` and never
+receive a token.
+
+```javascript
+window.skyslope.widget.initialize({
+  // Return a SkySlope access token for the currently signed-in user, or null.
+  getToken: async () => await myApp.getSkySlopeAccessToken(),
+});
+```
+
+Once the fallback is active:
+
+- The widget renews the session on its own a few minutes before it expires, by calling `getToken`
+  and handing the token to the app in the iframe with `postMessage`. `getToken` should return a
+  token that is valid for at least the next 5 minutes. A cached token is fine while it has that
+  much life left.
+- Each navigation fetches a fresh token from `getToken`.
+- When you get a new token for the same user before the old one expires, call
+  `await window.skyslope.widget.refreshToken()` to renew at once. To switch users, call
+  `clearToken()` (see below).
+- When Forms moves the iframe to DigiSign (the envelope builder), DigiSign asks the widget for a
+  token and gets one the same way. Renewals then go to whichever app is in the iframe.
+- If you reload your page or reopen the widget while Forms is still signed in from a token, the
+  widget picks the token path back up on its own, so renewals and DigiSign keep working.
+
+These hand-offs need Forms and DigiSign versions that support them. With an older DigiSign, the
+envelope builder cannot sign in inside the iframe in cookie-blocking browsers.
+
+#### Signing out or switching users
+
+Forms keeps the session it built from your token in the iframe's tab storage, so it can outlast
+your sign-out, even across a reload of your page. On sign-out or a user switch, call
+`await window.skyslope.widget.clearToken()` while the widget is still mounted. It stops renewal,
+asks the app in the iframe to drop its session, and reloads Forms without a token. It resolves
+within about 6 seconds at most.
+
+Order matters. In Safari the reload after `clearToken()` hits the cookie wall again and the widget
+calls `getToken` again, so sign the user out of your app first (or switch to the new user), so
+`getToken` returns `null` (or the new user's token). If it still returns the old user's token, that
+user is signed straight back in. After a sign-out the reload finds no token and raises an
+`authError` (`iframe-auth-failed`), which you can ignore.
+
+```javascript
+async function signOut() {
+  await myApp.signOut(); // from here getToken returns null
+  await window.skyslope.widget.clearToken(); // the widget must still be mounted
+  myApp.showSignedOutPage();
+}
+```
+
+#### Call `initialize()` before each open
+
+When the widget's container leaves the page (including when `closeModal()` closes the modal),
+`window.skyslope.widget` is replaced and every `initialize()` setting, `getToken` included, is
+dropped. Call `initialize()` again before each `openModal()` and each time you add
+`ss-container-inline` to the page, and always go through `window.skyslope.widget` rather than a
+saved reference. Without `getToken`, Safari users cannot sign in on the second open, while other
+browsers work, so test a second open in Safari.
+
+```javascript
+function openForms() {
+  window.skyslope.widget.initialize({ getToken: myApp.getSkySlopeAccessToken });
+  window.skyslope.widget.openModal();
+}
+```
+
+#### The `authError` event
+
+When sign-in cannot be established or kept, `ss-container-inline` emits an `authError` event. It
+bubbles out of `ss-container-modal`, so you can listen on either element (in typed JSX,
+`onAuthError` is declared on `ss-container-inline`). `event.detail.reason` is one of:
+
+- `token-callback-failed`: `getToken` threw or did not answer within 30 seconds. The error is in
+  `event.detail.error`. During a sign-in, as opposed to a renewal, `iframe-auth-failed` follows.
+- `iframe-auth-failed`: Forms or DigiSign could not sign in inside the iframe, for example because
+  `getToken` returned `null` or is not configured.
+- `token-renewal-failed`: a renewal failed twice. The current session keeps working until it
+  expires.
+- `signed-out`: the user signed out inside Forms or DigiSign. The widget has stopped renewing; sign
+  the user out of your app or close the widget.
+
+```javascript
+document.querySelector('ss-container-modal')
+  .addEventListener('authError', event => {
+    console.warn('Forms widget auth failed:', event.detail.reason);
+  });
+```
+
 ## Usage with Modal
 
 A pre-made modal is available for use with the widget. To open the modal, call the openModal function:
@@ -345,6 +444,8 @@ All of these functions are used internally by the web-components and are exposed
 - `openModal` opens a modal with SkySlope Forms loaded inside an iframe. This injects a modal [web component](https://developer.mozilla.org/en-US/docs/Web/Web_Components) into the body of the page.
 - `closeModal` closes the modal.
 - `reload` reloads the widgets internal iframe.
+- `refreshToken()` renews a token session at once. See [Safari and cookie-free authentication](#safari-and-cookie-free-authentication-gettoken).
+- `clearToken()` drops the token session on sign-out or a user switch. See [Signing out or switching users](#signing-out-or-switching-users).
 - `navigateTo(path: string)` navigates to a different path within the Forms app.
 - `navigateToCreateTransaction` navigates to the Create Transaction page. Returns newly created ID for data fetching. See section on [Listening for Events](#listening-for-events).
 - `navigateToCreateListing` navigates to the Create Listing page. Returns newly created ID for data fetching. See section on [Listening for Events](#listening-for-events).
