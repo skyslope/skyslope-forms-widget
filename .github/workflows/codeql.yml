@@ -1,0 +1,53 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # GitHub-hosted runners cannot upload results through the org IP allow
+    # list. This public repository can use only the public-release group,
+    # which GitHub restricts to this workflow and release.yml on main.
+    # A pull request, including from a fork, has a different ref and cannot
+    # take a runner. Do not add pull_request_target or workflow_dispatch:
+    # those events also run from main. Do not attach the release environment.
+    runs-on:
+      group: public-release
+      labels: skyslope-public-release
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    env:
+      # The runner container limit is 2 GiB. CodeQL otherwise sizes its heap
+      # from the node's memory, and the kernel kills the job.
+      CODEQL_RAM: 1400
+      CODEQL_THREADS: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

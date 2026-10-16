@@ -187,12 +187,14 @@ Start with isolated tests using synthetic origins and mock frames: URL construct
 
 ## Release CI
 
-The release workflow runs on `skyslope-public-release`, an ARM64 runner in
-the `public-release` group in ops-west. That group is the only self-hosted
-group open to this public repository. GitHub restricts it to
-`.github/workflows/release.yml` on `main`, so pull requests, including forks',
-cannot run on it. The job's `NPM_TOKEN` comes from the `release` environment,
-which only `main` can use and which needs a reviewer's approval. The runner pod
-has no Docker or privilege, but it shares nodes with other CI jobs that still
-run privileged Docker. devops-deployments documents that accepted risk in
-`devops/actions-runners-ci/README.md`.
+The release workflow and the CodeQL workflow run on `skyslope-public-release`,
+an ARM64 runner in the `public-release` group in ops-west. That group is the
+only self-hosted group open to this public repository. GitHub restricts it to
+`.github/workflows/release.yml` and `.github/workflows/codeql.yml` on `main`,
+so pull requests, including forks', cannot run on it. Both workflows trigger
+only on a push to `main`. The release job's `NPM_TOKEN` comes from the
+`release` environment, which only `main` can use and which needs a reviewer's
+approval. The CodeQL job is not in that environment and cannot publish. The
+runner pod has no Docker or privilege, but it shares nodes with other CI jobs
+that still run privileged Docker. devops-deployments documents that accepted
+risk in `devops/actions-runners-ci/README.md`.
