@@ -65,6 +65,6 @@ jobs:
           category: "/language:${{ matrix.language }}"
           # pull_request_target runs with GITHUB_REF set to main, so without
           # these the pull request's results would replace main's alerts.
-          # On push both are empty and the action uses the pushed commit.
-          ref: ${{ github.event_name == 'pull_request_target' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}
-          sha: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+          # Other events pass their own ref and the commit checked out above.
+          ref: ${{ github.event_name == 'pull_request_target' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          sha: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
