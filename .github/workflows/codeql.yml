@@ -63,3 +63,8 @@ jobs:
         uses: github/codeql-action/analyze@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
         with:
           category: "/language:${{ matrix.language }}"
+          # pull_request_target runs with GITHUB_REF set to main, so without
+          # these the pull request's results would replace main's alerts.
+          # On push both are empty and the action uses the pushed commit.
+          ref: ${{ github.event_name == 'pull_request_target' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}
+          sha: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
