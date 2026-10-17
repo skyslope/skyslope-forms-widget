@@ -20,6 +20,7 @@ jobs:
     runs-on:
       group: public-release
       labels: skyslope-public-release
+    timeout-minutes: 45
     permissions:
       actions: read
       contents: read
@@ -33,21 +34,23 @@ jobs:
           - language: javascript-typescript
             build-mode: none
     env:
-      # The runner container limit is 2 GiB. CodeQL otherwise sizes its heap
-      # from the node's memory, and the kernel kills the job.
-      CODEQL_RAM: 1400
+      # devops-deployments gives this runner a 4 GiB limit. The CLI rounds
+      # --ram up to 2048 MB, so a lower cap still fills a 2 GiB container.
+      # 3072 leaves room for the runner process. Without this, CodeQL sizes
+      # its heap from the node's memory.
+      CODEQL_RAM: 3072
       CODEQL_THREADS: 1
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
         with:
           category: "/language:${{ matrix.language }}"
