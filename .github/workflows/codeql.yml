@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request_target:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -13,10 +16,11 @@ jobs:
     name: Analyze (${{ matrix.language }})
     # GitHub-hosted runners cannot upload results through the org IP allow
     # list. This public repository can use only the public-release group,
-    # which GitHub restricts to this workflow and release.yml on main.
-    # A pull request, including from a fork, has a different ref and cannot
-    # take a runner. Do not add pull_request_target or workflow_dispatch:
-    # those events also run from main. Do not attach the release environment.
+    # which GitHub restricts to this file and release.yml on main.
+    # pull_request runs the workflow from the pull request, so it cannot
+    # take a runner. pull_request_target runs this file from main. Check out
+    # the pull request below and do not run its scripts. Do not add
+    # workflow_dispatch. Do not attach the release environment.
     runs-on:
       group: public-release
       labels: skyslope-public-release
@@ -43,6 +47,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
