@@ -1,6 +1,7 @@
 * @skyslope/agent-platform @skyslope/skunks
 
-# Workflows and repository automation need DevOps review. The org ruleset
-# requires code-owner review on main. The last matching pattern wins.
+# Everything under .github/ (workflows, templates and settings) and this
+# file need DevOps review. The org ruleset requires code-owner review on
+# main. The last matching pattern wins.
 /.github/ @skyslope/devops
 /CODEOWNERS @skyslope/devops
