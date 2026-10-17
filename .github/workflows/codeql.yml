@@ -1,0 +1,65 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # GitHub-hosted runners cannot upload results through the org IP allow
+    # list. This public repository can use only the public-release group,
+    # which GitHub restricts to this file and release.yml on main.
+    # pull_request runs the workflow from the pull request, so it cannot
+    # take a runner. pull_request_target runs this file from main. Check out
+    # the pull request below and do not run its scripts. Do not add
+    # workflow_dispatch. Do not attach the release environment.
+    runs-on:
+      group: public-release
+      labels: skyslope-public-release
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    env:
+      # devops-deployments gives this runner a 4 GiB limit. The CLI rounds
+      # --ram up to 2048 MB, so a lower cap still fills a 2 GiB container.
+      # 3072 leaves room for the runner process. Without this, CodeQL sizes
+      # its heap from the node's memory.
+      CODEQL_RAM: 3072
+      CODEQL_THREADS: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0
+        with:
+          category: "/language:${{ matrix.language }}"
