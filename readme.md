@@ -99,11 +99,12 @@ If you are not using SSO, you can initialize the widget without an IDP:
 </script>
 ```
 
-### Safari and cookie-free authentication (`getToken`)
+### Support for browsers with third-party cookies disabled
 
-By default the embedded Forms app signs the user in with cookies. Safari, and any browser with
-third-party cookies disabled, blocks those cookies inside the widget's iframe, so the user sees a
-"third-party cookies are disabled" message instead of Forms.
+By default the embedded Forms app signs the user in with cookies. Browsers with third-party cookies
+disabled block those cookies inside the widget's iframe, so the user sees a "third-party cookies are
+disabled" message instead of Forms. Safari does this by default, as do Chrome incognito and Firefox
+strict mode.
 
 To support these browsers, pass a `getToken` callback that returns a SkySlope access token for the
 signed-in user. It may return the token or a promise of it, and should return `null` when there is
@@ -122,7 +123,7 @@ window.skyslope.widget.initialize({
 
 Once the fallback is active:
 
-- The widget renews the session on its own a few minutes before it expires, by calling `getToken`
+- The widget renews the session on its own 3 minutes before it expires, by calling `getToken`
   and handing the token to the app in the iframe with `postMessage`. `getToken` should return a
   token that is valid for at least the next 5 minutes. A cached token is fine while it has that
   much life left.
@@ -138,6 +139,8 @@ Once the fallback is active:
 These hand-offs need Forms and DigiSign versions that support them. With an older DigiSign, the
 envelope builder cannot sign in inside the iframe in cookie-blocking browsers.
 
+No new Content-Security-Policy or Referrer-Policy settings are needed on your page.
+
 #### Signing out or switching users
 
 Forms keeps the session it built from your token in the iframe's tab storage, so it can outlast
@@ -146,11 +149,11 @@ your sign-out, even across a reload of your page. On sign-out or a user switch, 
 asks the app in the iframe to drop its session, and reloads Forms without a token. It resolves
 within about 6 seconds at most.
 
-Order matters. In Safari the reload after `clearToken()` hits the cookie wall again and the widget
-calls `getToken` again, so sign the user out of your app first (or switch to the new user), so
-`getToken` returns `null` (or the new user's token). If it still returns the old user's token, that
-user is signed straight back in. After a sign-out the reload finds no token and raises an
-`authError` (`iframe-auth-failed`), which you can ignore.
+Order matters. In a browser with third-party cookies disabled, the reload after `clearToken()`
+hits the cookie wall again and the widget calls `getToken` again, so sign the user out of your app
+first (or switch to the new user), so `getToken` returns `null` (or the new user's token). If it
+still returns the old user's token, that user is signed straight back in. After a sign-out the
+reload finds no token and raises an `authError` (`iframe-auth-failed`), which you can ignore.
 
 ```javascript
 async function signOut() {
@@ -166,8 +169,8 @@ When the widget's container leaves the page (including when `closeModal()` close
 `window.skyslope.widget` is replaced and every `initialize()` setting, `getToken` included, is
 dropped. Call `initialize()` again before each `openModal()` and each time you add
 `ss-container-inline` to the page, and always go through `window.skyslope.widget` rather than a
-saved reference. Without `getToken`, Safari users cannot sign in on the second open, while other
-browsers work, so test a second open in Safari.
+saved reference. Without `getToken`, users in browsers with third-party cookies disabled cannot
+sign in on the second open, while other browsers work, so test a second open in Safari.
 
 ```javascript
 function openForms() {
@@ -444,7 +447,7 @@ All of these functions are used internally by the web-components and are exposed
 - `openModal` opens a modal with SkySlope Forms loaded inside an iframe. This injects a modal [web component](https://developer.mozilla.org/en-US/docs/Web/Web_Components) into the body of the page.
 - `closeModal` closes the modal.
 - `reload` reloads the widgets internal iframe.
-- `refreshToken()` renews a token session at once. See [Safari and cookie-free authentication](#safari-and-cookie-free-authentication-gettoken).
+- `refreshToken()` renews a token session at once. See [Support for browsers with third-party cookies disabled](#support-for-browsers-with-third-party-cookies-disabled).
 - `clearToken()` drops the token session on sign-out or a user switch. See [Signing out or switching users](#signing-out-or-switching-users).
 - `navigateTo(path: string)` navigates to a different path within the Forms app.
 - `navigateToCreateTransaction` navigates to the Create Transaction page. Returns newly created ID for data fetching. See section on [Listening for Events](#listening-for-events).
@@ -472,7 +475,7 @@ https://forms.skyslope.com/file-details/{fileId}/{route}?headerVariant=focused
 https://send.skyslope.com/envelopes/{envelopeId}?headerVariant=focused
 ```
 
-## Framing in Safari and other cookie-blocked browsers
+## Framing in browsers with third-party cookies disabled
 
 The widget appends `?frameOrigin=<origin of the host page>` to the Forms iframe URL. This is the same
 value it already reports as `widgetTrack.widgetOrigin`; no new information leaves the host page.
