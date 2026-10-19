@@ -124,9 +124,9 @@ window.skyslope.widget.initialize({
 Once the fallback is active:
 
 - The widget renews the session on its own 3 minutes before it expires, by calling `getToken`
-  and handing the token to the app in the iframe with `postMessage`. `getToken` should return a
-  token that is valid for at least the next 5 minutes. A cached token is fine while it has that
-  much life left.
+  and handing the token to the app in the iframe with `postMessage`. The new token `getToken`
+  returns should be valid for at least the next 5 minutes, so the renewed session is not due for
+  renewal again right away. A cached token is fine while it has that much life left.
 - Each navigation fetches a fresh token from `getToken`.
 - When you get a new token for the same user before the old one expires, call
   `await window.skyslope.widget.refreshToken()` to renew at once. To switch users, call
