@@ -477,23 +477,39 @@ interface SkySlopeMessage {
     | 'forms-bulk-fill'
     | 'forms-buyer-agreement-rename'
     | 'forms-prepare-signature'
-    | 'digisign-prepare-for-signature';
-    | 'digisign-ready-to-send',
+    | 'digisign-prepare-for-signature'
+    | 'digisign-ready-to-send';
   metadata?: {
-    fileId?: number,
-    formsEnvelopeId?: number,
-    formsDocumentIds?: number[],
-    digisignEnvelopeId?: string,
+    fileId?: number;
+    formsEnvelopeId?: number;
+    formsDocumentIds?: number[];
+    digisignEnvelopeId?: string;
   };
 }
-window.addEventListener('message', event => {
-  // Check if the origin of the message is from SkySlope Forms
-  if (event.origin == 'forms.skyslope.com') {
-    const data = JSON.parse(event.data);
-    const { metadata, status } = data;
-    console.log(metadata.fileId); // Returns ID of newly created transaction or listing, eg. 123
 
-    console.log(status); // 'forms-*'
+// Messages come from Forms, or from DigiSign once the user moves on to sending.
+// event.origin includes the scheme, so compare against the full origin.
+const SKYSLOPE_ORIGINS = ['https://forms.skyslope.com', 'https://send.skyslope.com'];
+
+window.addEventListener('message', event => {
+  // Ignore messages from anywhere else
+  if (!SKYSLOPE_ORIGINS.includes(event.origin)) return;
+
+  // Some messages arrive as a JSON string, some as an object, and some as a bare status string
+  let data = event.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      data = { status: data };
+    }
   }
+  const { metadata, status } = data ?? {};
+
+  console.log(status); // 'forms-*' or 'digisign-*'
+  console.log(metadata?.fileId); // ID of a newly created transaction or listing, eg. 123
 });
 ```
+
+These are the production origins. If you test against another SkySlope environment, use that
+environment's Forms and DigiSign origins.

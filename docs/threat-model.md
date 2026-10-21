@@ -83,11 +83,11 @@ The principal boundaries are executable distribution into the host origin; host-
 
 **Residual risk:** An approved release can still contain application defects. Host integration should minimize unrelated sensitive functionality and third-party scripts on the embedding page.
 
-### FW-02 — The documented inbound message contract is incomplete and currently rejects valid origins
+### FW-02 — The documented inbound message contract is incomplete
 
-**Priority/category:** P2; message integrity and availability, potentially P1 if consumers turn events into privileged actions. **Likelihood:** High for integrators copying the example exactly; injection impact depends on how an integration changes or supplements it.
+**Priority/category:** P2; message integrity and availability, potentially P1 if consumers turn events into privileged actions. **Likelihood:** Medium for integrators copying the example exactly; injection impact depends on how an integration changes or supplements it.
 
-**Path and impact:** The example compares `event.origin` with a hostname without its scheme. A browser reports an origin including scheme, so legitimate HTTPS Forms messages do not satisfy that condition. Even after correcting that mismatch, the example lacks `event.source` binding to the intended iframe, payload-size/schema checks, status-specific identifier validation, and guarded JSON parsing. Other trusted-origin windows or malformed payloads can cause cross-workflow confusion or exceptions if accepted by the host. An unrelated hostile origin is not accepted by the exact broken comparison; this is not a proven arbitrary-origin bypass in shipped runtime code.
+**Path and impact:** The example accepts messages whose `event.origin` exactly matches the production Forms or DigiSign origin, and it parses string payloads inside a `try`. It lacks `event.source` binding to the intended iframe, payload-size/schema checks, and status-specific identifier validation. Other windows on a trusted origin or unexpected payloads can cause cross-workflow confusion if accepted by the host. Unrelated origins are rejected; this is not a proven arbitrary-origin bypass in shipped runtime code.
 
 **Controls/evidence:** The README attempts an origin check, and outgoing reload uses a fixed target origin. See `readme.md:Listening for Events` and `ss-container-inline.tsx:reloadIframe`. The library's only receive-side listener handles its own `forms-*` and `digisign-*` auth statuses; integrators still receive workflow messages themselves. Signing events may originate elsewhere, but their emitter/origin behavior is not available here.
 
