@@ -466,7 +466,7 @@ https://send.skyslope.com/envelopes/{envelopeId}?headerVariant=focused
 
 Depending on the function selected, the SkySlope Forms Widget can post a message containing information relevant to further data querying. For example, after calling `navigateToCreateTransaction`:
 
-```javascript
+```typescript
 interface SkySlopeMessage {
   status?:
     | 'forms-onboarding-complete'
@@ -477,23 +477,44 @@ interface SkySlopeMessage {
     | 'forms-bulk-fill'
     | 'forms-buyer-agreement-rename'
     | 'forms-prepare-signature'
-    | 'digisign-prepare-for-signature';
-    | 'digisign-ready-to-send',
+    | 'digisign-prepare-for-signature'
+    | 'digisign-ready-to-send';
   metadata?: {
-    fileId?: number,
-    formsEnvelopeId?: number,
-    formsDocumentIds?: number[],
-    digisignEnvelopeId?: string,
+    fileId?: number;
+    formsEnvelopeId?: number;
+    formsDocumentIds?: number[];
+    digisignEnvelopeId?: string;
   };
 }
-window.addEventListener('message', event => {
-  // Check if the origin of the message is from SkySlope Forms
-  if (event.origin == 'forms.skyslope.com') {
-    const data = JSON.parse(event.data);
-    const { metadata, status } = data;
-    console.log(metadata.fileId); // Returns ID of newly created transaction or listing, eg. 123
 
-    console.log(status); // 'forms-*'
+// event.origin includes the scheme, so compare against the full origin.
+const FORMS_ORIGIN = 'https://forms.skyslope.com';
+
+window.addEventListener('message', event => {
+  // Ignore messages from other sites
+  if (event.origin !== FORMS_ORIGIN) return;
+  // Ignore windows that are not framed directly in this page, such as a tab or popup this page opened
+  const source = event.source;
+  if (!source || !('parent' in source) || source.parent !== window) return;
+  // Widget messages are JSON strings. Forms also sends some plain-text messages meant for other
+  // SkySlope apps; skip those.
+  if (typeof event.data !== 'string') return;
+  let data;
+  try {
+    data = JSON.parse(event.data);
+  } catch {
+    return;
+  }
+  const { status, metadata } = data ?? {};
+
+  if (status === 'forms-create-file') {
+    console.log(metadata?.fileId); // ID of the newly created transaction or listing, eg. 123
   }
 });
 ```
+
+Ignore any status you don't handle. The widget uses some messages for its own sign-in, and new
+statuses may be added.
+
+The listener above uses the production origin. For testing in other SkySlope environments, use
+`https://integ-forms.skyslope.com` or `https://staging-forms.skyslope.com`.
