@@ -466,7 +466,7 @@ https://send.skyslope.com/envelopes/{envelopeId}?headerVariant=focused
 
 Depending on the function selected, the SkySlope Forms Widget can post a message containing information relevant to further data querying. For example, after calling `navigateToCreateTransaction`:
 
-```javascript
+```typescript
 interface SkySlopeMessage {
   status:
     | 'forms-onboarding-complete'
