@@ -468,48 +468,45 @@ Depending on the function selected, the SkySlope Forms Widget can post a message
 
 ```javascript
 interface SkySlopeMessage {
-  status?:
+  status:
     | 'forms-onboarding-complete'
     | 'forms-user-ready'
-    | 'forms-edit-contacts'
-    | 'forms-download-document'
-    | 'forms-create-file'
-    | 'forms-bulk-fill'
-    | 'forms-buyer-agreement-rename'
-    | 'forms-prepare-signature'
-    | 'digisign-prepare-for-signature'
-    | 'digisign-ready-to-send';
+    | 'forms-create-file' // metadata.fileId
+    | 'forms-download-document'; // metadata.formsDocumentIds
   metadata?: {
     fileId?: number;
-    formsEnvelopeId?: number;
     formsDocumentIds?: number[];
-    digisignEnvelopeId?: string;
   };
 }
 
-// Messages come from Forms, or from DigiSign once the user moves on to sending.
 // event.origin includes the scheme, so compare against the full origin.
-const SKYSLOPE_ORIGINS = ['https://forms.skyslope.com', 'https://send.skyslope.com'];
+const FORMS_ORIGIN = 'https://forms.skyslope.com';
 
 window.addEventListener('message', event => {
-  // Ignore messages from anywhere else
-  if (!SKYSLOPE_ORIGINS.includes(event.origin)) return;
-
-  // Some messages arrive as a JSON string, some as an object, and some as a bare status string
-  let data = event.data;
-  if (typeof data === 'string') {
-    try {
-      data = JSON.parse(data);
-    } catch {
-      data = { status: data };
-    }
+  // Ignore messages from other sites
+  if (event.origin !== FORMS_ORIGIN) return;
+  // Ignore windows that are not framed directly in this page, such as a tab or popup this page opened
+  const source = event.source;
+  if (!source || !('parent' in source) || source.parent !== window) return;
+  // Widget messages are JSON strings. Forms also sends some plain-text messages meant for other
+  // SkySlope apps; skip those.
+  if (typeof event.data !== 'string') return;
+  let data;
+  try {
+    data = JSON.parse(event.data);
+  } catch {
+    return;
   }
-  const { metadata, status } = data ?? {};
+  const { status, metadata } = data ?? {};
 
-  console.log(status); // 'forms-*' or 'digisign-*'
-  console.log(metadata?.fileId); // ID of a newly created transaction or listing, eg. 123
+  if (status === 'forms-create-file') {
+    console.log(metadata?.fileId); // ID of the newly created transaction or listing, eg. 123
+  }
 });
 ```
 
-These are the production origins. If you test against another SkySlope environment, use that
-environment's Forms and DigiSign origins.
+Ignore any status you don't handle. The widget uses some messages for its own sign-in, and new
+statuses may be added.
+
+The listener above uses the production origin. For testing in other SkySlope environments, use
+`https://integ-forms.skyslope.com` or `https://staging-forms.skyslope.com`.
