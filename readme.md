@@ -468,14 +468,22 @@ Depending on the function selected, the SkySlope Forms Widget can post a message
 
 ```typescript
 interface SkySlopeMessage {
-  status:
+  status?:
     | 'forms-onboarding-complete'
     | 'forms-user-ready'
-    | 'forms-create-file' // metadata.fileId
-    | 'forms-download-document'; // metadata.formsDocumentIds
+    | 'forms-edit-contacts'
+    | 'forms-download-document'
+    | 'forms-create-file'
+    | 'forms-bulk-fill'
+    | 'forms-buyer-agreement-rename'
+    | 'forms-prepare-signature'
+    | 'digisign-prepare-for-signature'
+    | 'digisign-ready-to-send';
   metadata?: {
     fileId?: number;
+    formsEnvelopeId?: number;
     formsDocumentIds?: number[];
+    digisignEnvelopeId?: string;
   };
 }
 
