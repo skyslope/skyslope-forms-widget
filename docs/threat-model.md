@@ -195,10 +195,14 @@ so a `pull_request` run, including a fork's, cannot use it. The release
 workflow triggers only on a push to `main`. CodeQL also triggers on
 `pull_request_target`, which runs this file from `main` and checks out the
 pull request commit with credentials disabled. It does not run that commit's
-scripts. The release job's `NPM_TOKEN` comes from the `release` environment,
-which only `main` can use and which needs a reviewer's approval. The CodeQL
-job is not in that environment, so it does not receive `NPM_TOKEN` and cannot
-publish the package. Its token can upload code scanning results. The runner
+scripts. The release job runs in the `release` environment, which only `main`
+can use and which needs a reviewer's approval. It reads `NPM_TOKEN` and a
+GitHub App private key from Actions secrets, publishes with the former, and
+pushes the release commit and tag with a short-lived installation token minted
+from the latter. The workflow's own token is read-only. The CodeQL job is not
+in that environment and has no write access to repository contents, so it
+cannot publish the package or push to `main`. Its token can upload code
+scanning results. The runner
 pod has no Docker or privilege, but it shares nodes with other CI jobs that
 still run privileged Docker. devops-deployments documents that accepted risk
 in `devops/actions-runners-ci/README.md`.

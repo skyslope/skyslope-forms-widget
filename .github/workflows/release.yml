@@ -5,10 +5,10 @@ on:
     branches:
       - main  # Run on pushes to the main branch
 
+# Writes to main go through the GitHub App installation token minted below;
+# the workflow's own token is read-only.
 permissions:
-  contents: write       # push the release commit and tag, create the GitHub release
-  issues: write         # comment on released issues
-  pull-requests: write  # comment on released pull requests
+  contents: read
 
 jobs:
   release:
@@ -18,17 +18,30 @@ jobs:
     runs-on:
       group: public-release
       labels: skyslope-public-release
-    # Holds NPM_TOKEN. Limited to main, with a required reviewer.
+    # Limited to main, with a required reviewer.
     environment: release
 
     steps:
+      - name: Mint release token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # The installation grants contents only; issue and PR comments are disabled in release.config.js
+          permission-contents: write  # push the release commit and tag, create the GitHub release
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # semantic-release pushes with the app token; keep the checkout token out of git config
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # @semantic-release/npm 13 requires Node >= 22.14
+          node-version: '24'
 
       - name: Install dependencies
         run: npm ci
@@ -54,5 +67,5 @@ jobs:
       - name: Run semantic-release
         run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
