@@ -6,8 +6,13 @@ module.exports = {
     // Generate release notes and changelog
     '@semantic-release/release-notes-generator',
     '@semantic-release/changelog',
-    // Create a GitHub release
-    '@semantic-release/github',
+    // Create a GitHub release. The release token has contents access only, so
+    // skip the issue and pull request comments and labels.
+    ['@semantic-release/github', {
+      successComment: false,
+      failComment: false,
+      releasedLabels: false
+    }],
     // Publish to npm
     '@semantic-release/npm',
     // Commit updated changelog and package.json files back to the repository
