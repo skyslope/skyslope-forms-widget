@@ -38,6 +38,15 @@ export interface SkyslopeConfig {
   openInline?: boolean;
   headerVariant?: string | null;
   /**
+   * Elements to hide inside the embedded Forms screens. Unknown values are ignored.
+   */
+  hide?: WidgetHideableElement[] | null;
+  /**
+   * Set to false to render the SkySlope Forms logo without its link to the Forms home screen.
+   * Defaults to true.
+   */
+  logoClickable?: boolean | null;
+  /**
    * Optional callback that returns a SkySlope access token for the current user.
    * When provided, the widget passes the token to the embedded Forms app (in the iframe URL
    * fragment for the first sign-in, by postMessage for renewals and for DigiSign) so it can
@@ -50,6 +59,8 @@ export interface SkyslopeConfig {
    */
   getToken?: GetTokenCallback | null;
 }
+
+export type WidgetHideableElement = 'breadcrumb' | 'add-forms';
 
 export type GetTokenCallback = () => string | null | Promise<string | null>;
 

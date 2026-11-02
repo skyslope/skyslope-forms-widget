@@ -1,6 +1,6 @@
 /* eslint-disable @stencil-community/strict-boolean-conditions */
 
-import type { GetTokenCallback, ModalProps, SkyslopeConfig } from './window';
+import type { GetTokenCallback, ModalProps, SkyslopeConfig, WidgetHideableElement } from './window';
 import { SkyslopePaths } from './components/ss-container-inline/types';
 
 // Kept in module scope so embedding pages get no well-known global to call (see threat model FW-08).
@@ -10,11 +10,17 @@ export function readGetToken(): GetTokenCallback | null {
   return storedGetToken;
 }
 
+// Kept in step with WidgetHideableElement. Anything else a host passes is dropped, so only values
+// Forms knows reach its URL.
+const HIDEABLE_ELEMENTS: readonly WidgetHideableElement[] = ['breadcrumb', 'add-forms'];
+
 export class SkySlopeWidget {
   private _path: string;
   private _idp: string | null;
   private _openInline: boolean;
   private _headerVariant: string | null;
+  private _hide: WidgetHideableElement[];
+  private _logoClickable: boolean;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
   private _refreshCallback: () => Promise<void>;
@@ -24,10 +30,21 @@ export class SkySlopeWidget {
     this._path = '';
   }
 
-  initialize = ({ idp, openInline, headerVariant, getToken }: SkyslopeConfig = { idp: null, openInline: false, headerVariant: null, getToken: null }) => {
+  initialize = (
+    { idp, openInline, headerVariant, hide, logoClickable, getToken }: SkyslopeConfig = {
+      idp: null,
+      openInline: false,
+      headerVariant: null,
+      hide: null,
+      logoClickable: null,
+      getToken: null,
+    },
+  ) => {
     this._idp = idp ?? null;
     this._openInline = openInline ?? false;
     this._headerVariant = headerVariant ?? null;
+    this._hide = Array.isArray(hide) ? HIDEABLE_ELEMENTS.filter(element => hide.includes(element)) : [];
+    this._logoClickable = logoClickable !== false;
     storedGetToken = getToken ?? null;
   };
 
@@ -127,6 +144,14 @@ export class SkySlopeWidget {
 
   get headerVariant(): string {
     return this._headerVariant;
+  }
+
+  get hide(): WidgetHideableElement[] {
+    return this._hide ?? [];
+  }
+
+  get logoClickable(): boolean {
+    return this._logoClickable ?? true;
   }
 }
 

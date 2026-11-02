@@ -152,6 +152,31 @@ const init = () =>
   });
 ```
 
+### Hiding elements in the embedded screens
+
+To keep users inside the screen you embed, you can hide individual Forms elements and turn off the
+logo's link to the Forms home screen. Each option is off by default, so an embed that passes none
+of them is unchanged.
+
+```javascript
+const init = () =>
+  window.skyslope.widget.initialize({
+    openInline: true,
+    headerVariant: 'focused',
+    hide: ['breadcrumb', 'add-forms'],
+    logoClickable: false,
+  });
+```
+
+| Option          | Value                           | Effect                                                                   |
+| --------------- | ------------------------------- | ------------------------------------------------------------------------ |
+| `hide`          | Array containing `'breadcrumb'` | Hides the breadcrumb (back link) in the Forms header.                    |
+| `hide`          | Array containing `'add-forms'`  | Hides the **Add Forms** button in the fill and template screens.         |
+| `logoClickable` | `false`                         | Shows the SkySlope Forms logo without its link to the Forms home screen. |
+
+Values of `hide` that are not in this table are ignored. The options last for the rest of the
+session in the frame, including pages the user reaches from the one you opened.
+
 Next, you will need to add the following ss-container-inline web component to your HTML or JSX:
 
 ```html
