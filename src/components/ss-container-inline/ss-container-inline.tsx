@@ -374,7 +374,7 @@ export class SsContainerInline {
 
     if (widget.idp) params.idp = widget.idp;
     if (widget.headerVariant) params.headerVariant = widget.headerVariant;
-    if (widget.hide.length > 0) params.hide = widget.hide.join(',');
+    if (widget.hide?.length > 0) params.hide = widget.hide.join(',');
     if (widget.logoClickable === false) params.logoClickable = 'false';
 
     const baseUrl = `${Env.formsUrl}${widget.path}`;
