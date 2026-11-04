@@ -502,8 +502,10 @@ interface SkySlopeMessage {
     | 'forms-bulk-fill'
     | 'forms-buyer-agreement-rename'
     | 'forms-prepare-signature'
+    | 'forms-bulk-fill-save-and-exit'
     | 'digisign-prepare-for-signature'
-    | 'digisign-ready-to-send';
+    | 'digisign-ready-to-send'
+    | 'digisign-envelope-sent';
   metadata?: {
     fileId?: number;
     formsEnvelopeId?: number;
@@ -536,6 +538,23 @@ window.addEventListener('message', event => {
     console.log(metadata?.fileId); // ID of the newly created transaction or listing, eg. 123
   }
 });
+```
+
+### Knowing when the user is done
+
+Two statuses tell you the user has finished in the embedded screens, so you can close the widget and
+refresh your own data:
+
+| Status                          | Sent when                                                                                                                     | `metadata`                                                        |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
+| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope.                                                                       | `digisignEnvelopeId`                                              |
+
+```javascript
+if (status === 'forms-bulk-fill-save-and-exit' || status === 'digisign-envelope-sent') {
+  closeWidget(); // your code
+  refreshFromSkySlope(); // your code, for example re-read the file from the SkySlope API
+}
 ```
 
 Ignore any status you don't handle. The widget uses some messages for its own sign-in, and new
