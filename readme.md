@@ -555,7 +555,7 @@ refresh your own data:
 | Status                          | Sent when                                                                                                                     | `metadata`                                                        |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
-| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope.                                                                       | `digisignEnvelopeId`                                              |
+| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope started from Forms.                                                    | `digisignEnvelopeId`                                              |
 
 `forms-bulk-fill-save-and-exit` comes from the Forms origin and `digisign-envelope-sent` from the
 DigiSign origin, which is why the listener above accepts both.
