@@ -550,17 +550,17 @@ window.addEventListener('message', event => {
 ### Knowing when the user is done
 
 Two statuses tell you the user has finished in the embedded screens, so you can close the widget and
-refresh your own data:
+refresh your own data. They require widget 1.4.0 or later.
 
-| Status                          | Sent when                                                                                                                     | `metadata`                                                        |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
-| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope started from Forms.                                                    | `digisignEnvelopeId`                                              |
+| Status                          | Sent when                                                                                                                                                        | `metadata`                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the envelope fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog, or from template screens. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
+| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope started from Forms.                                                                                       | `digisignEnvelopeId`                                              |
 
 `digisign-envelope-sent` is not sent when:
 
 - the user picks **Sign now** instead of **I'm Done**, since they leave DigiSign's sender screens to sign;
-- DigiSign goes straight on to Smart Listings setup after sending, since the user is not done yet.
+- the user goes on to Smart Listings setup after sending, since they are not done yet.
 
 `forms-bulk-fill-save-and-exit` comes from the Forms origin and `digisign-envelope-sent` from the
 DigiSign origin, which is why the listener above accepts both.
