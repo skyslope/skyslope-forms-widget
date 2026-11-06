@@ -371,7 +371,7 @@ sees a "third-party cookies are disabled" message instead of Forms.
 To support them, pass a `getToken` callback that returns a SkySlope access token for the signed-in
 user. It may return the token or a promise of it, and should return `null` when there is no
 signed-in user. The widget calls it only when it needs a token, so browsers where the normal
-sign-in works never call it.
+sign-in works never call it unless `forceTokenAuth` is enabled.
 
 ```javascript
 window.skyslope.widget.initialize({
@@ -379,6 +379,23 @@ window.skyslope.widget.initialize({
   getToken: async () => await myApp.getSkySlopeAccessToken(),
 });
 ```
+
+To always use an access token, even when third-party cookies are available, set
+`forceTokenAuth: true` before mounting or opening the widget:
+
+```javascript
+window.skyslope.widget.initialize({
+  forceTokenAuth: true,
+  getToken: async () => await myApp.getSkySlopeAccessToken(),
+});
+```
+
+The default is `false`, which preserves cookie-first authentication. Forced mode starts with a
+blank iframe while fetching the token and does not fall back to cookie authentication if the
+callback is missing, returns `null`, throws, or times out; it raises `authError` instead.
+Renewal and DigiSign use the same token flow. After `clearToken()` clears the old Forms session,
+forced mode requests the current user's token again, or remains blank if no user is signed in.
+Reapply this option along with `getToken` before each open.
 
 What `getToken` should do:
 

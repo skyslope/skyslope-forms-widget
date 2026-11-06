@@ -2333,3 +2333,74 @@ describe('globalScript widget API', () => {
     expect(done).toBe(true);
   });
 });
+
+
+describe('forced token authentication', () => {
+  afterEach(() => { delete (window as any).skyslope; });
+
+  function forced(getToken: GetToken | null) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ getToken, forceTokenAuth: true });
+    return result;
+  }
+
+  it('starts blank and fetches a token on mount without an auth-failed message', async () => {
+    const getToken = jest.fn(async () => 'forced-token');
+    const { component, iframeEl, emitted } = forced(getToken);
+    expect(component.render().$children$[0].$attrs$.src).toBe('about:blank');
+    await component.componentDidLoad();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(iframeEl.navigatedTo).toContain('#t=forced-token');
+    expect(iframeEl.src).toBe('');
+    expect(emitted).toEqual([]);
+    await component.handleAuthFailed();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+
+  it.each([null, () => null, async () => null])('does not load a cookie session without a token (%p)', async getToken => {
+    const { component, iframeEl, emitted } = forced(getToken);
+    await component.componentDidLoad();
+    expect(iframeEl.navigatedTo).toBeUndefined();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+    component.loadFrame();
+    expect(iframeEl.src).toBe('about:blank');
+  });
+
+  it('does not fetch on mount by default and resets the option on initialize', async () => {
+    const getToken = jest.fn(() => 'token');
+    const { component } = forced(getToken);
+    window.skyslope.widget.initialize({ getToken });
+    expect(window.skyslope.widget.forceTokenAuth).toBe(false);
+    await component.componentDidLoad();
+    expect(getToken).not.toHaveBeenCalled();
+  });
+
+  it('starts token authentication on navigation and stays blank if a later token is unavailable', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('token').mockReturnValue(null);
+    const { component, iframeEl } = forced(getToken);
+    await component.navigateTo();
+    expect(iframeEl.navigatedTo).toContain('#t=token');
+    await component.navigateTo();
+    expect(iframeEl.src).toBe('about:blank');
+  });
+
+  it('ignores a pending initial token after unmount', async () => {
+    let resolve: (token: string) => void;
+    const { component, iframeEl } = forced(() => new Promise(r => { resolve = r; }));
+    const pending = component.componentDidLoad();
+    component.disconnectedCallback();
+    resolve('late-token');
+    await pending;
+    expect(iframeEl.navigatedTo).toBeUndefined();
+  });
+
+  it('clears the old session and starts with the new host token', async () => {
+    const { component, iframeEl } = forced(() => 'new-user-token');
+    component.askFrameToClear = async () => 'forms';
+    component.waitForFrameLoad = async () => {};
+    await component.clearToken();
+    expect(iframeEl.src).toBe('about:blank');
+    expect(iframeEl.navigatedTo).toContain('#t=new-user-token');
+  });
+});

@@ -97,12 +97,12 @@ export class SsContainerInline {
   @Event({ bubbles: true, composed: true }) authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
   // The token most recently fetched from the host and handed to the app in the frame. Null outside
-  // token mode, so browsers whose cookie sign-in works never get one.
+  // token mode. Forced authentication enters token mode before the first Forms load.
   private token: string | null = null;
 
   // True while the frame runs on a token session: set when Forms hits the cookie wall and the host
-  // has a getToken, or when Forms reports a session restored from a widget token (after a host
-  // reload or a remount). Only then are tokens fetched and sent. A second cookie wall in this mode
+  // has a getToken, when the host forces token authentication, or when Forms reports a session
+  // restored from a widget token (after a host reload or a remount). Only then are tokens fetched and sent. A second cookie wall in this mode
   // is reported instead of reloading again, which would loop.
   private tokenMode = false;
 
@@ -405,6 +405,10 @@ export class SsContainerInline {
       iframe.contentWindow.location.replace(`${url}#t=${encodeURIComponent(this.token)}`);
       return true;
     }
+    if (window.skyslope?.widget?.forceTokenAuth && !clearForms) {
+      iframe.src = 'about:blank';
+      return false;
+    }
     iframe.src = url;
     return true;
   }
@@ -413,6 +417,10 @@ export class SsContainerInline {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
     // leaves the token null, so navigation never introduces a token.
+    if (window.skyslope?.widget?.forceTokenAuth && !this.tokenMode) {
+      await this.handleAuthFailed();
+      return;
+    }
     const generation = this.sessionGeneration;
     if (this.tokenMode) await this.fetchHostToken();
     if (generation !== this.sessionGeneration) return;
@@ -438,7 +446,7 @@ export class SsContainerInline {
     if (generation !== this.sessionGeneration) return;
     // Whatever was in the frame, Forms is loaded next.
     this.frameApp = 'forms';
-    if (answeredBy === 'forms') {
+    if (answeredBy === 'forms' && !window.skyslope?.widget?.forceTokenAuth) {
       // Forms confirmed it dropped its session. Reload without a token. Anything still running in the old page
       // goes away with it.
       this.loadFrame();
@@ -452,6 +460,11 @@ export class SsContainerInline {
     const loaded = iframe != null ? this.waitForFrameLoad(iframe) : Promise.resolve();
     this.loadFrame(true);
     await loaded;
+    if (generation !== this.sessionGeneration) return;
+    if (window.skyslope?.widget?.forceTokenAuth) {
+      if (iframe != null) iframe.src = 'about:blank';
+      await this.handleAuthFailed();
+    }
   };
 
   // Resolves when the frame finishes its next load, or after CLEAR_WAIT_MS. Never rejects.
@@ -601,6 +614,7 @@ export class SsContainerInline {
     this.frameApp = app;
     switch (data.status) {
       case FORMS_AUTH_FAILED:
+        if (this.clearing != null && window.skyslope?.widget?.forceTokenAuth) break;
         void this.handleAuthFailed();
         break;
       case FORMS_SESSION_EXPIRY:
@@ -682,6 +696,10 @@ export class SsContainerInline {
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
 
+  componentDidLoad() {
+    if (window.skyslope?.widget?.forceTokenAuth) return this.handleAuthFailed();
+  }
+
   disconnectedCallback() {
     window.removeEventListener('message', this.handleMessage);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -694,7 +712,14 @@ export class SsContainerInline {
   render() {
     return (
       <Host>
-        <iframe id="ss-container-iframe" frameborder="0" allowfullScreen title="SkySlope Forms" src={this.getUrl()} style={{ backgroundColor: '#f4f8fc' }} />
+        <iframe
+          id="ss-container-iframe"
+          frameborder="0"
+          allowfullScreen
+          title="SkySlope Forms"
+          src={window.skyslope?.widget?.forceTokenAuth ? 'about:blank' : this.getUrl()}
+          style={{ backgroundColor: '#f4f8fc' }}
+        />
       </Host>
     );
   }

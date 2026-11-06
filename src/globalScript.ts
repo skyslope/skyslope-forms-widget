@@ -21,6 +21,7 @@ export class SkySlopeWidget {
   private _headerVariant: string | null;
   private _hide: WidgetHideableElement[];
   private _logoClickable: boolean;
+  private _forceTokenAuth = false;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
   private _refreshCallback: () => Promise<void>;
@@ -31,7 +32,7 @@ export class SkySlopeWidget {
   }
 
   initialize = (
-    { idp, openInline, headerVariant, hide, logoClickable, getToken }: SkyslopeConfig = {
+    { idp, openInline, headerVariant, hide, logoClickable, getToken, forceTokenAuth }: SkyslopeConfig = {
       idp: null,
       openInline: false,
       headerVariant: null,
@@ -46,6 +47,7 @@ export class SkySlopeWidget {
     this._hide = Array.isArray(hide) ? HIDEABLE_ELEMENTS.filter(element => hide.includes(element)) : [];
     this._logoClickable = logoClickable !== false;
     storedGetToken = getToken ?? null;
+    this._forceTokenAuth = forceTokenAuth === true;
   };
 
   openModal = (
@@ -129,6 +131,10 @@ export class SkySlopeWidget {
     }
     this._clearTokenCallback = clearTokenCallback;
   };
+
+  get forceTokenAuth(): boolean {
+    return this._forceTokenAuth;
+  }
 
   get openInline(): boolean {
     return this._openInline;
