@@ -90,6 +90,9 @@ export class SsContainerInline {
   @State() private frameKey = 0;
   private forceTokenAuth = false;
   private disposed = false;
+  private frameHasLoaded = false;
+  // Remains true after an unconfirmed clear, even if the visible frame is now blank.
+  private needsRemoteClear = false;
   private forcedClearing: Promise<boolean> | null = null;
   private frameReset: Promise<void> | null = null;
   private resolveFrameReset: (() => void) | null = null;
@@ -106,6 +109,7 @@ export class SsContainerInline {
   }
 
   private resetFrame(): Promise<void> {
+    this.frameHasLoaded = false;
     this.frameReset ??= new Promise(resolve => {
       this.resolveFrameReset = resolve;
       this.frameKey++;
@@ -412,6 +416,9 @@ export class SsContainerInline {
   private iframe = () => this.el.shadowRoot?.getElementById('ss-container-iframe') as HTMLIFrameElement | null;
 
   private reloadIframe = () => {
+    if (this.forceTokenAuth && (!this.frameHasLoaded || this.frameReset != null)) {
+      return this.navigateForced();
+    }
     this.postToFrame('forms', 'reload');
   };
 
@@ -430,6 +437,8 @@ export class SsContainerInline {
       if (iframe.contentWindow == null) return false;
       // The token goes in the fragment, which is never sent to the server. Forms strips it on read.
       iframe.contentWindow.location.replace(`${url}#t=${encodeURIComponent(this.token)}`);
+      this.frameHasLoaded = true;
+      this.needsRemoteClear = true;
       return true;
     }
     if (this.forceTokenAuth) return false;
@@ -441,19 +450,37 @@ export class SsContainerInline {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
     // leaves the token null, so navigation never introduces a token.
-    if (this.forcedClearing != null) return;
-    if (this.forceTokenAuth && !this.tokenMode) {
-      await this.handleAuthFailed();
-      return;
-    }
+    if (this.forceTokenAuth) return this.navigateForced();
     const generation = this.sessionGeneration;
     if (this.tokenMode) await this.fetchHostToken();
     if (generation !== this.sessionGeneration) return;
-    if (!this.loadFrame() && this.forceTokenAuth && this.token == null) {
-      await this.resetFrame();
+    this.loadFrame();
+  };
+
+  private navigateForced = async (): Promise<void> => {
+    if (this.forcedClearing != null || this.disposed) return;
+    // Latest navigation wins, including token results and errors from earlier requests.
+    const generation = this.endTokenSession();
+    this.tokenMode = true;
+    this.adoptionBlocked = false;
+    if (this.frameReset != null) await this.frameReset;
+    if (generation !== this.sessionGeneration) return;
+    await this.fetchHostToken();
+    if (generation !== this.sessionGeneration) return;
+    if (this.frameReset != null) await this.frameReset;
+    if (generation !== this.sessionGeneration) return;
+    if (this.token == null) {
+      this.tokenMode = false;
+      if (this.frameHasLoaded) await this.resetFrame();
       if (generation !== this.sessionGeneration) return;
       this.authError.emit({ reason: 'iframe-auth-failed' });
+      return;
     }
+    if (!this.loadFrame()) {
+      this.endTokenSession();
+      return;
+    }
+    this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
@@ -481,7 +508,8 @@ export class SsContainerInline {
   };
 
   private clearForcedFrame = async (): Promise<boolean> => {
-    const answeredBy = await this.askFrameToClear();
+    const answeredBy = this.needsRemoteClear ? await this.askFrameToClear() : 'forms';
+    if (answeredBy === 'forms') this.needsRemoteClear = false;
     if (this.disposed) return false;
     // Replacing the iframe discards its WindowProxy and pending navigations. Queued messages
     // from the old document fail the event.source check, even after a new sign-in starts.
@@ -720,6 +748,7 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
+    if (this.forceTokenAuth) return this.navigateForced();
     this.tokenMode = true;
     // A new sign-in: the user is past any sign-out inside the frame.
     this.adoptionBlocked = false;

@@ -2405,6 +2405,7 @@ describe('forced token authentication', () => {
 
   it('clears the old session and starts with the new host token', async () => {
     const { component, iframeEl } = forced(() => 'new-user-token');
+    component.needsRemoteClear = true;
     component.askFrameToClear = async () => 'forms';
     component.waitForFrameLoad = async () => {};
     await component.clearToken();
@@ -2421,6 +2422,7 @@ describe('forced clearing regression cases', () => {
     const result = makeComponent(getToken);
     window.skyslope.widget.initialize({ getToken, forceTokenAuth: true });
     result.component.componentWillLoad();
+    result.component.needsRemoteClear = true;
     result.component.resetFrame = jest.fn(async () => {});
     return result;
   }
@@ -2441,6 +2443,7 @@ describe('forced clearing regression cases', () => {
     let finishToken: (token: string) => void;
     const getToken = jest.fn().mockImplementationOnce(() => new Promise(r => { finishToken = r; })).mockReturnValue(null);
     const { component, iframeEl } = setup(getToken);
+    component.needsRemoteClear = true;
     component.askFrameToClear = async () => 'forms';
     const switching = component.clearToken();
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -2476,5 +2479,79 @@ describe('forced clearing regression cases', () => {
     await clearing;
     expect(component.resetFrame).not.toHaveBeenCalled();
     expect(getToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('forced blank-frame recovery', () => {
+  afterEach(() => { delete window.skyslope; jest.useRealTimers(); });
+
+  function setup(getToken: GetToken) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    result.component.componentWillLoad();
+    result.component.resetFrame = jest.fn(async () => { result.component.frameHasLoaded = false; });
+    return result;
+  }
+
+  it('switches users during the initial fetch without asking the blank frame to clear', async () => {
+    let finishOld: (token: string) => void;
+    const getToken = jest.fn().mockImplementationOnce(() => new Promise(r => { finishOld = r; })).mockReturnValue('new-user');
+    const { component, iframeEl, emitted } = setup(getToken);
+    component.askFrameToClear = jest.fn();
+    const initial = component.componentDidLoad();
+    await component.clearToken();
+    finishOld('old-user');
+    await initial;
+    expect(component.askFrameToClear).not.toHaveBeenCalled();
+    expect(iframeEl.navigatedTo).toContain('#t=new-user');
+    expect(emitted).toEqual([]);
+  });
+
+  it.each(['null', 'throw', 'timeout'])('reload retries after a %s startup failure', async failure => {
+    jest.useFakeTimers();
+    const getToken = jest.fn().mockImplementationOnce(() => {
+      if (failure === 'throw') throw new Error('unavailable');
+      if (failure === 'timeout') return new Promise(() => {});
+      return null;
+    }).mockReturnValue('recovered');
+    const { component, iframeEl } = setup(getToken);
+    const initial = component.componentDidLoad();
+    if (failure === 'timeout') jest.advanceTimersByTime(30000);
+    await initial;
+    await component.reloadIframe();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(iframeEl.navigatedTo).toContain('#t=recovered');
+  });
+
+  it('waits for the replacement frame and suppresses the superseded navigation error', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('initial').mockReturnValueOnce(null).mockReturnValue('latest');
+    const { component, iframeEl, emitted } = setup(getToken);
+    await component.componentDidLoad();
+    let finishReset: () => void;
+    component.resetFrame = () => {
+      component.frameHasLoaded = false;
+      component.frameReset = new Promise<void>(r => { finishReset = r; });
+      return component.frameReset;
+    };
+    const failed = component.navigateTo();
+    await settle();
+    const recovered = component.navigateTo();
+    await settle();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(iframeEl.navigatedTo).toContain('#t=initial');
+    finishReset();
+    await Promise.all([failed, recovered]);
+    expect(iframeEl.navigatedTo).toContain('#t=latest');
+    expect(emitted).toEqual([]);
+  });
+
+  it('does not mistake a blank frame after failed cleanup for confirmed cleanup', async () => {
+    const { component, emitted } = setup(() => 'token');
+    await component.componentDidLoad();
+    component.askFrameToClear = jest.fn(async () => null);
+    await component.clearToken();
+    await component.clearToken();
+    expect(component.askFrameToClear).toHaveBeenCalledTimes(2);
+    expect(emitted).toEqual([{ reason: 'token-clear-failed' }, { reason: 'token-clear-failed' }]);
   });
 });

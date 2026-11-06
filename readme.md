@@ -396,8 +396,11 @@ callback is missing, returns `null`, throws, or times out; it raises `authError`
 Renewal and DigiSign use the same token flow. After `clearToken()` clears the old Forms session,
 forced mode requests the current user's token again, or remains blank if no user is signed in.
 The option is fixed for the mounted container; changing it requires remounting.
+If startup cannot obtain a token, `reload()` (or the modal refresh button) retries it.
+Switching users before the first token is delivered cancels that pending request and starts
+a new one without waiting for a response from the still-blank iframe.
 
-In forced mode, `clearToken()` requires confirmation from Forms. If DigiSign is open or Forms
+Once this container has delivered a token, forced-mode `clearToken()` requires confirmation from Forms. If DigiSign is open or Forms
 does not confirm within three seconds, the widget replaces the iframe with a blank frame, emits
 `token-clear-failed`, and does not reauthenticate. Stored Forms state may remain: handle this
 event as incomplete cleanup, not successful logout. The current remote protocol cannot clear

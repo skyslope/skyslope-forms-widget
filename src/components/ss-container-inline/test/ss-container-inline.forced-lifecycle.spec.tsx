@@ -3,8 +3,24 @@ import { Env } from '@stencil/core';
 import { SsContainerInline } from '../ss-container-inline';
 import { SkySlopeWidget } from '../../../globalScript';
 
-Env.formsUrl = Env.formsUrl ?? 'http://localhost:3001/';
-Env.digisignUrl = Env.digisignUrl ?? 'http://localhost:3000/';
+let previousFormsUrl: string;
+let previousDigisignUrl: string;
+let previousSkyslope: typeof window.skyslope;
+
+beforeEach(() => {
+  previousFormsUrl = Env.formsUrl;
+  previousDigisignUrl = Env.digisignUrl;
+  previousSkyslope = window.skyslope;
+  Env.formsUrl = Env.formsUrl ?? 'http://localhost:3001/';
+  Env.digisignUrl = Env.digisignUrl ?? 'http://localhost:3000/';
+});
+
+afterEach(() => {
+  Env.formsUrl = previousFormsUrl;
+  Env.digisignUrl = previousDigisignUrl;
+  if (previousSkyslope === undefined) delete window.skyslope;
+  else window.skyslope = previousSkyslope;
+});
 
 it('replaces the iframe on confirmed forced clear and rejects messages from the old frame', async () => {
   const page = await newSpecPage({ components: [SsContainerInline], html: '' });
@@ -17,6 +33,7 @@ it('replaces the iframe on confirmed forced clear and rejects messages from the 
   expect(oldFrame.hasAttribute('src')).toBe(false);
   const oldWindow = {};
   Object.defineProperty(oldFrame, 'contentWindow', { value: oldWindow, configurable: true });
+  component.needsRemoteClear = true;
   component.askFrameToClear = async () => 'forms';
   const clearing = component.clearToken();
   for (let i = 0; i < 5; i++) await Promise.resolve();
