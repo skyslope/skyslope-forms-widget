@@ -395,6 +395,14 @@ blank iframe while fetching the token and does not fall back to cookie authentic
 callback is missing, returns `null`, throws, or times out; it raises `authError` instead.
 Renewal and DigiSign use the same token flow. After `clearToken()` clears the old Forms session,
 forced mode requests the current user's token again, or remains blank if no user is signed in.
+The option is fixed for the mounted container; changing it requires remounting.
+
+In forced mode, `clearToken()` requires confirmation from Forms. If DigiSign is open or Forms
+does not confirm within three seconds, the widget replaces the iframe with a blank frame, emits
+`token-clear-failed`, and does not reauthenticate. Stored Forms state may remain: handle this
+event as incomplete cleanup, not successful logout. The current remote protocol cannot clear
+Forms storage from DigiSign without a cookie-capable Forms load. Keep forced mode enabled on
+subsequent opens; a complete cross-app logout requires support from the Forms/DigiSign apps.
 Reapply this option along with `getToken` before each open.
 
 What `getToken` should do:
@@ -458,6 +466,8 @@ bubbles out of `ss-container-modal`, so you can listen on either element (in typ
   `getToken` returned `null` or is not configured.
 - `token-renewal-failed`: the widget could not get a new token to keep the session signed in. The
   current session keeps working until it expires.
+- `token-clear-failed`: forced-mode clearing was not confirmed by Forms. The widget is blank,
+  but stored sessions may remain; the host must handle incomplete cleanup.
 - `signed-out`: the user signed out inside Forms or DigiSign. The widget has stopped renewing; sign
   the user out of your app or close the widget.
 
