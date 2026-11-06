@@ -502,8 +502,10 @@ interface SkySlopeMessage {
     | 'forms-bulk-fill'
     | 'forms-buyer-agreement-rename'
     | 'forms-prepare-signature'
+    | 'forms-bulk-fill-save-and-exit'
     | 'digisign-prepare-for-signature'
-    | 'digisign-ready-to-send';
+    | 'digisign-ready-to-send'
+    | 'digisign-envelope-sent';
   metadata?: {
     fileId?: number;
     formsEnvelopeId?: number;
@@ -512,12 +514,13 @@ interface SkySlopeMessage {
   };
 }
 
-// event.origin includes the scheme, so compare against the full origin.
-const FORMS_ORIGIN = 'https://forms.skyslope.com';
+// event.origin includes the scheme, so compare against full origins. Forms hands the user off to
+// DigiSign inside the same frame, so DigiSign's messages come from the DigiSign origin.
+const SKYSLOPE_ORIGINS = ['https://forms.skyslope.com', 'https://send.skyslope.com'];
 
 window.addEventListener('message', event => {
   // Ignore messages from other sites
-  if (event.origin !== FORMS_ORIGIN) return;
+  if (!SKYSLOPE_ORIGINS.includes(event.origin)) return;
   // Ignore windows that are not framed directly in this page, such as a tab or popup this page opened
   const source = event.source;
   if (!source || !('parent' in source) || source.parent !== window) return;
@@ -535,11 +538,34 @@ window.addEventListener('message', event => {
   if (status === 'forms-create-file') {
     console.log(metadata?.fileId); // ID of the newly created transaction or listing, eg. 123
   }
+
+  // See "Knowing when the user is done" below.
+  if (status === 'forms-bulk-fill-save-and-exit' || status === 'digisign-envelope-sent') {
+    closeWidget(); // your code
+    refreshFromSkySlope(); // your code, for example re-read the file from the SkySlope API
+  }
 });
 ```
+
+### Knowing when the user is done
+
+Two statuses tell you the user has finished in the embedded screens, so you can close the widget and
+refresh your own data:
+
+| Status                          | Sent when                                                                                                                     | `metadata`                                                        |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
+| `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope started from Forms.                                                    | `digisignEnvelopeId`                                              |
+
+`forms-bulk-fill-save-and-exit` comes from the Forms origin and `digisign-envelope-sent` from the
+DigiSign origin, which is why the listener above accepts both.
+
+Treat the IDs in `metadata` as references to look up through the SkySlope API, not as proof that
+the user is allowed to see them.
 
 Ignore any status you don't handle. The widget uses some messages for its own sign-in, and new
 statuses may be added.
 
-The listener above uses the production origin. For testing in other SkySlope environments, use
-`https://integ-forms.skyslope.com` or `https://staging-forms.skyslope.com`.
+The listener above uses the production origins. For testing in other SkySlope environments, use
+`https://integ-forms.skyslope.com` and `https://integ-send.skyslope.com`, or
+`https://staging-forms.skyslope.com` and `https://staging-send.skyslope.com`.
