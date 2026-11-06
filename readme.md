@@ -557,6 +557,11 @@ refresh your own data:
 | `forms-bulk-fill-save-and-exit` | The user clicks **Save & Exit** in the fill screen and the save finishes. Not sent if they cancel the "Save as draft" dialog. | `fileId`, plus `formsEnvelopeId` when the draft envelope was kept |
 | `digisign-envelope-sent`        | The user clicks **I'm Done** after sending an envelope started from Forms.                                                    | `digisignEnvelopeId`                                              |
 
+`digisign-envelope-sent` is not sent when:
+
+- the user picks **Sign now** instead of **I'm Done**, since they leave DigiSign's sender screens to sign;
+- DigiSign goes straight on to Smart Listings setup after sending, since the user is not done yet.
+
 `forms-bulk-fill-save-and-exit` comes from the Forms origin and `digisign-envelope-sent` from the
 DigiSign origin, which is why the listener above accepts both.
 
