@@ -403,10 +403,13 @@ a new one without waiting for a response from the still-blank iframe.
 Once this container has delivered a token, forced-mode `clearToken()` requires confirmation from Forms. If DigiSign is open or Forms
 does not confirm within three seconds, the widget replaces the iframe with a blank frame, emits
 `token-clear-failed`, and does not reauthenticate. Stored Forms state may remain: handle this
-event as incomplete cleanup, not successful logout. The current remote protocol cannot clear
+event as incomplete cleanup, not successful logout. Reload, navigation, and reconnecting the
+same container remain blocked until Forms confirms cleanup; retrying authentication does not
+clear this block. The current remote protocol cannot clear
 Forms storage from DigiSign without a cookie-capable Forms load. Keep forced mode enabled on
 subsequent opens; a complete cross-app logout requires support from the Forms/DigiSign apps.
-Reapply this option along with `getToken` before each open.
+Reapply this option along with `getToken` before each open. When reattaching the same container,
+reinitialize the widget first; forced authentication restarts on reconnect unless cleanup is blocked.
 
 What `getToken` should do:
 

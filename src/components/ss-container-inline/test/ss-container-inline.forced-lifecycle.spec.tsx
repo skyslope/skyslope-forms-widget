@@ -51,3 +51,26 @@ it('replaces the iframe on confirmed forced clear and rejects messages from the 
   expect(handler).toHaveBeenCalledTimes(1);
   await page.setContent('');
 });
+
+it('bootstraps the same custom element when detached and reattached', async () => {
+  const page = await newSpecPage({ components: [SsContainerInline], html: '' });
+  const getToken = jest.fn(() => null);
+  const widget = new SkySlopeWidget();
+  widget.initialize({ forceTokenAuth: true, getToken });
+  window.skyslope = { widget };
+  await page.setContent('<ss-container-inline></ss-container-inline>');
+  const element = page.root;
+  const component = page.rootInstance as any;
+  expect(getToken).toHaveBeenCalledTimes(1);
+  component.frameHasLoaded = true;
+  element.remove();
+  await page.waitForChanges();
+  expect(component.frameHasLoaded).toBe(false);
+  window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+  page.body.appendChild(element);
+  await page.waitForChanges();
+  expect(page.rootInstance).toBe(component);
+  expect(getToken).toHaveBeenCalledTimes(2);
+  element.remove();
+  await page.waitForChanges();
+});

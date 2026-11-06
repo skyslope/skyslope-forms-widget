@@ -93,6 +93,9 @@ export class SsContainerInline {
   private frameHasLoaded = false;
   // Remains true after an unconfirmed clear, even if the visible frame is now blank.
   private needsRemoteClear = false;
+  private cleanupBlocked = false;
+  private hasLoadedComponent = false;
+  private connectionGeneration = 0;
   private forcedClearing: Promise<boolean> | null = null;
   private frameReset: Promise<void> | null = null;
   private resolveFrameReset: (() => void) | null = null;
@@ -459,6 +462,10 @@ export class SsContainerInline {
 
   private navigateForced = async (): Promise<void> => {
     if (this.forcedClearing != null || this.disposed) return;
+    if (this.cleanupBlocked) {
+      this.authError.emit({ reason: 'token-clear-failed' });
+      return;
+    }
     // Latest navigation wins, including token results and errors from earlier requests.
     const generation = this.endTokenSession();
     this.tokenMode = true;
@@ -476,11 +483,18 @@ export class SsContainerInline {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
-    if (!this.loadFrame()) {
+    try {
+      if (this.loadFrame()) {
+        this.scheduleRenewal(this.decodeExpiry(this.token));
+        return;
+      }
+    } catch (error) {
       this.endTokenSession();
+      this.authError.emit({ reason: 'iframe-auth-failed', error });
       return;
     }
-    this.scheduleRenewal(this.decodeExpiry(this.token));
+    this.endTokenSession();
+    this.authError.emit({ reason: 'iframe-auth-failed' });
   };
 
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
@@ -498,6 +512,7 @@ export class SsContainerInline {
     // Every caller invalidates pending tokens, even while sharing the remote clear handshake.
     const generation = this.endTokenSession();
     this.adoptionBlocked = true;
+    this.cleanupBlocked ||= this.needsRemoteClear;
     this.forcedClearing ??= this.clearForcedFrame().finally(() => {
       this.forcedClearing = null;
     });
@@ -508,13 +523,17 @@ export class SsContainerInline {
   };
 
   private clearForcedFrame = async (): Promise<boolean> => {
+    const connection = this.connectionGeneration;
     const answeredBy = this.needsRemoteClear ? await this.askFrameToClear() : 'forms';
-    if (answeredBy === 'forms') this.needsRemoteClear = false;
-    if (this.disposed) return false;
+    if (this.disposed || connection !== this.connectionGeneration) return false;
+    if (answeredBy === 'forms') {
+      this.needsRemoteClear = false;
+      this.cleanupBlocked = false;
+    }
     // Replacing the iframe discards its WindowProxy and pending navigations. Queued messages
     // from the old document fail the event.source check, even after a new sign-in starts.
     await this.resetFrame();
-    if (this.disposed) return false;
+    if (this.disposed || connection !== this.connectionGeneration) return false;
     this.frameApp = 'forms';
     if (answeredBy !== 'forms') {
       // DigiSign cannot clear Forms storage. Loading the Forms clear fragment would allow cookie
@@ -644,7 +663,7 @@ export class SsContainerInline {
   // with a getToken (browsers whose cookie sign-in works never get a token) and not right after
   // an in-frame sign-out. Returns whether token mode is now on.
   private adoptTokenSession(): boolean {
-    if (readGetToken() == null || this.adoptionBlocked) return false;
+    if (readGetToken() == null || this.adoptionBlocked || this.cleanupBlocked) return false;
     this.tokenMode = true;
     return true;
   }
@@ -780,19 +799,34 @@ export class SsContainerInline {
     widget?.registerClearToken(this.clearToken);
     window.addEventListener('message', this.handleMessage);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    if (this.hasLoadedComponent && this.forceTokenAuth) return this.restartOnReconnect();
   }
 
+  private restartOnReconnect = async (): Promise<void> => {
+    const generation = this.sessionGeneration;
+    if (this.forcedClearing != null) await this.forcedClearing;
+    if (this.disposed || generation !== this.sessionGeneration) return;
+    await this.startForcedAuth();
+  };
+
   componentDidLoad() {
+    this.hasLoadedComponent = true;
+    if (this.forceTokenAuth) return this.startForcedAuth();
+  }
+
+  private startForcedAuth(): Promise<void> {
     // The iframe already exists; sign-in does not depend on Stencil awaiting this promise.
-    if (this.forceTokenAuth) {
-      return this.handleAuthFailed().catch(error => {
-        this.authError.emit({ reason: 'iframe-auth-failed', error });
-      });
-    }
+    // Callback throws/timeouts are already handled by fetchHostToken. This catches only
+    // unexpected startup failures; the documented callback-error sequence is unchanged.
+    return this.handleAuthFailed().catch(error => {
+      this.authError.emit({ reason: 'iframe-auth-failed', error });
+    });
   }
 
   disconnectedCallback() {
     this.disposed = true;
+    this.connectionGeneration++;
+    this.frameHasLoaded = false;
     window.removeEventListener('message', this.handleMessage);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     // Stops renewals, and token work still waiting on the host.
