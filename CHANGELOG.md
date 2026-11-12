@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/skyslope/skyslope-forms-widget/compare/v1.4.0...v1.5.0) (2026-11-12)
+
+
+### Features
+
+* let hosts hide the breadcrumb and Add Forms and unlink the logo (AP-4147) ([#42](https://github.com/skyslope/skyslope-forms-widget/issues/42)) ([fcc2c8c](https://github.com/skyslope/skyslope-forms-widget/commit/fcc2c8cdb166b9d206b3043bbf83f56661e23f16))
+
 # [1.4.0](https://github.com/skyslope/skyslope-forms-widget/compare/v1.3.0...v1.4.0) (2026-10-24)
 
 
