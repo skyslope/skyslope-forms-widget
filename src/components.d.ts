@@ -161,7 +161,7 @@ declare namespace LocalJSX {
     }
     interface SsContainerInline {
         /**
-          * Emitted when sign-in inside the frame cannot be established or kept, so the host can react (e.g. re-authenticate the user). reason is 'token-callback-failed' when getToken throws or times out, 'iframe-auth-failed' when Forms or DigiSign could not sign in inside the frame, 'token-renewal-failed' when a renewal failed twice, and 'signed-out' when the user signed out inside Forms or DigiSign during a token session.
+          * Emitted when sign-in inside the frame cannot be established or kept, so the host can react (e.g. re-authenticate the user). reason is 'token-callback-failed' when getToken throws or times out, 'iframe-auth-failed' when Forms or DigiSign could not sign in inside the frame, 'token-renewal-failed' when a renewal failed twice, and 'signed-out' when the user signed out inside Forms or DigiSign during a token session. 'token-clear-failed' means forced-mode cleanup was not confirmed by Forms; the frame is blank but stored sessions may remain.
          */
         "onAuthError"?: (event: SsContainerInlineCustomEvent<{ reason: WidgetAuthErrorReason; error?: unknown }>) => void;
     }

@@ -371,7 +371,7 @@ sees a "third-party cookies are disabled" message instead of Forms.
 To support them, pass a `getToken` callback that returns a SkySlope access token for the signed-in
 user. It may return the token or a promise of it, and should return `null` when there is no
 signed-in user. The widget calls it only when it needs a token, so browsers where the normal
-sign-in works never call it.
+sign-in works never call it unless `forceTokenAuth` is enabled.
 
 ```javascript
 window.skyslope.widget.initialize({
@@ -379,6 +379,37 @@ window.skyslope.widget.initialize({
   getToken: async () => await myApp.getSkySlopeAccessToken(),
 });
 ```
+
+To always use an access token, even when third-party cookies are available, set
+`forceTokenAuth: true` before mounting or opening the widget:
+
+```javascript
+window.skyslope.widget.initialize({
+  forceTokenAuth: true,
+  getToken: async () => await myApp.getSkySlopeAccessToken(),
+});
+```
+
+The default is `false`, which preserves cookie-first authentication. Forced mode starts with a
+blank iframe while fetching the token and does not fall back to cookie authentication if the
+callback is missing, returns `null`, throws, or times out; it raises `authError` instead.
+Renewal and DigiSign use the same token flow. After `clearToken()` clears the old Forms session,
+forced mode requests the current user's token again, or remains blank if no user is signed in.
+The option is fixed for the mounted container; changing it requires remounting.
+If startup cannot obtain a token, `reload()` (or the modal refresh button) retries it.
+Switching users before the first token is delivered cancels that pending request and starts
+a new one without waiting for a response from the still-blank iframe.
+
+Once this container has delivered a token, forced-mode `clearToken()` requires confirmation from Forms. If DigiSign is open or Forms
+does not confirm within three seconds, the widget replaces the iframe with a blank frame, emits
+`token-clear-failed`, and does not reauthenticate. Stored Forms state may remain: handle this
+event as incomplete cleanup, not successful logout. Reload, navigation, and reconnecting the
+same container remain blocked until Forms confirms cleanup; retrying authentication does not
+clear this block. The current remote protocol cannot clear
+Forms storage from DigiSign without a cookie-capable Forms load. Keep forced mode enabled on
+subsequent opens; a complete cross-app logout requires support from the Forms/DigiSign apps.
+Reapply this option along with `getToken` before each open. When reattaching the same container,
+reinitialize the widget first; forced authentication restarts on reconnect unless cleanup is blocked.
 
 What `getToken` should do:
 
@@ -441,6 +472,8 @@ bubbles out of `ss-container-modal`, so you can listen on either element (in typ
   `getToken` returned `null` or is not configured.
 - `token-renewal-failed`: the widget could not get a new token to keep the session signed in. The
   current session keeps working until it expires.
+- `token-clear-failed`: forced-mode clearing was not confirmed by Forms. The widget is blank,
+  but stored sessions may remain; the host must handle incomplete cleanup.
 - `signed-out`: the user signed out inside Forms or DigiSign. The widget has stopped renewing; sign
   the user out of your app or close the widget.
 

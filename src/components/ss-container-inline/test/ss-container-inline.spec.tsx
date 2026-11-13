@@ -2333,3 +2333,302 @@ describe('globalScript widget API', () => {
     expect(done).toBe(true);
   });
 });
+
+describe('forced token authentication', () => {
+  afterEach(() => { delete (window as any).skyslope; });
+
+  function forced(getToken: GetToken | null) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ getToken, forceTokenAuth: true });
+    result.component.componentWillLoad();
+    result.component.resetFrame = jest.fn(async () => {
+      result.iframeEl.src = '';
+      result.iframeEl.navigatedTo = undefined;
+      result.iframeEl.contentWindow = { postMessage: jest.fn(), location: {
+        replace: (url: string) => { result.iframeEl.navigatedTo = url; },
+      } };
+    });
+    return result;
+  }
+
+  it('starts blank and fetches a token on mount without an auth-failed message', async () => {
+    const getToken = jest.fn(async () => 'forced-token');
+    const { component, iframeEl, emitted } = forced(getToken);
+    expect(component.render().$children$[0].$attrs$.src).toBeUndefined();
+    await component.componentDidLoad();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(iframeEl.navigatedTo).toContain('#t=forced-token');
+    expect(iframeEl.src).toBe('');
+    expect(emitted).toEqual([]);
+    await component.handleAuthFailed();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+
+  it.each([null, () => null, async () => null])('does not load a cookie session without a token (%p)', async getToken => {
+    const { component, iframeEl, emitted } = forced(getToken);
+    await component.componentDidLoad();
+    expect(iframeEl.navigatedTo).toBeUndefined();
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+    component.loadFrame();
+    expect(iframeEl.src).toBe('');
+  });
+
+  it('keeps the mounted policy when initialize resets the global option', async () => {
+    const getToken = jest.fn(() => 'token');
+    const { component } = forced(getToken);
+    window.skyslope.widget.initialize({ getToken });
+    expect(window.skyslope.widget.forceTokenAuth).toBe(false);
+    await component.componentDidLoad();
+    expect(getToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts token authentication on navigation and stays blank if a later token is unavailable', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('token').mockReturnValue(null);
+    const { component, iframeEl, emitted } = forced(getToken);
+    await component.navigateTo();
+    expect(iframeEl.navigatedTo).toContain('#t=token');
+    await component.navigateTo();
+    expect(iframeEl.src).toBe('');
+    expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
+  });
+
+  it('ignores a pending initial token after unmount', async () => {
+    let resolve: (token: string) => void;
+    const { component, iframeEl } = forced(() => new Promise(r => { resolve = r; }));
+    const pending = component.componentDidLoad();
+    component.disconnectedCallback();
+    resolve('late-token');
+    await pending;
+    expect(iframeEl.navigatedTo).toBeUndefined();
+  });
+
+  it('clears the old session and starts with the new host token', async () => {
+    const { component, iframeEl } = forced(() => 'new-user-token');
+    component.needsRemoteClear = true;
+    component.askFrameToClear = async () => 'forms';
+    component.waitForFrameLoad = async () => {};
+    await component.clearToken();
+    expect(iframeEl.src).toBe('');
+    expect(iframeEl.navigatedTo).toContain('#t=new-user-token');
+  });
+});
+
+
+describe('forced clearing regression cases', () => {
+  afterEach(() => { delete (window as any).skyslope; });
+
+  function setup(getToken: GetToken | null) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ getToken, forceTokenAuth: true });
+    result.component.componentWillLoad();
+    result.component.needsRemoteClear = true;
+    result.component.resetFrame = jest.fn(async () => {});
+    return result;
+  }
+
+  it.each(['digisign', null])('reports incomplete cleanup for %p without a cookie navigation or token request', async answer => {
+    const getToken = jest.fn(() => 'token');
+    const { component, iframeEl, emitted } = setup(getToken);
+    component.askFrameToClear = async () => answer;
+    await component.clearToken();
+    expect(component.resetFrame).toHaveBeenCalledTimes(1);
+    expect(iframeEl.src).toBe('');
+    expect(iframeEl.navigatedTo).toBeUndefined();
+    expect(getToken).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'token-clear-failed' }]);
+  });
+
+  it('invalidates pending user-switch authentication on a second clear', async () => {
+    let finishToken: (token: string) => void;
+    const getToken = jest.fn().mockImplementationOnce(() => new Promise(r => { finishToken = r; })).mockReturnValue(null);
+    const { component, iframeEl } = setup(getToken);
+    component.needsRemoteClear = true;
+    component.askFrameToClear = async () => 'forms';
+    const switching = component.clearToken();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    await component.clearToken();
+    finishToken('stale-user-token');
+    await switching;
+    expect(iframeEl.navigatedTo).toBeUndefined();
+    expect(component.token).toBeNull();
+  });
+
+  it('shares remote cleanup but only the latest clear can reauthenticate', async () => {
+    let finishClear: (app: string) => void;
+    const getToken = jest.fn(() => 'latest-token');
+    const { component } = setup(getToken);
+    component.askFrameToClear = jest.fn(() => new Promise(r => { finishClear = r; }));
+    const first = component.clearToken();
+    const second = component.clearToken();
+    finishClear('forms');
+    await Promise.all([first, second]);
+    expect(component.askFrameToClear).toHaveBeenCalledTimes(1);
+    expect(getToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reset or authenticate after unmount during the clear handshake', async () => {
+    let finishClear: (app: string) => void;
+    const getToken = jest.fn(() => 'token');
+    const { component } = setup(getToken);
+    component.askFrameToClear = () => new Promise(r => { finishClear = r; });
+    const clearing = component.clearToken();
+    component.disconnectedCallback();
+    finishClear('forms');
+    await clearing;
+    expect(component.resetFrame).not.toHaveBeenCalled();
+    expect(getToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('forced blank-frame recovery', () => {
+  afterEach(() => { delete window.skyslope; jest.useRealTimers(); });
+
+  function setup(getToken: GetToken) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    result.component.componentWillLoad();
+    result.component.resetFrame = jest.fn(async () => { result.component.frameHasLoaded = false; });
+    return result;
+  }
+
+  it('switches users during the initial fetch without asking the blank frame to clear', async () => {
+    let finishOld: (token: string) => void;
+    const getToken = jest.fn().mockImplementationOnce(() => new Promise(r => { finishOld = r; })).mockReturnValue('new-user');
+    const { component, iframeEl, emitted } = setup(getToken);
+    component.askFrameToClear = jest.fn();
+    const initial = component.componentDidLoad();
+    await component.clearToken();
+    finishOld('old-user');
+    await initial;
+    expect(component.askFrameToClear).not.toHaveBeenCalled();
+    expect(iframeEl.navigatedTo).toContain('#t=new-user');
+    expect(emitted).toEqual([]);
+  });
+
+  it.each(['null', 'throw', 'timeout'])('reload retries after a %s startup failure', async failure => {
+    jest.useFakeTimers();
+    const getToken = jest.fn().mockImplementationOnce(() => {
+      if (failure === 'throw') throw new Error('unavailable');
+      if (failure === 'timeout') return new Promise(() => {});
+      return null;
+    }).mockReturnValue('recovered');
+    const { component, iframeEl } = setup(getToken);
+    const initial = component.componentDidLoad();
+    if (failure === 'timeout') jest.advanceTimersByTime(30000);
+    await initial;
+    await component.reloadIframe();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(iframeEl.navigatedTo).toContain('#t=recovered');
+  });
+
+  it('waits for the replacement frame and suppresses the superseded navigation error', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('initial').mockReturnValueOnce(null).mockReturnValue('latest');
+    const { component, iframeEl, emitted } = setup(getToken);
+    await component.componentDidLoad();
+    let finishReset: () => void;
+    component.resetFrame = () => {
+      component.frameHasLoaded = false;
+      component.frameReset = new Promise<void>(r => { finishReset = r; });
+      return component.frameReset;
+    };
+    const failed = component.navigateTo();
+    await settle();
+    const recovered = component.navigateTo();
+    await settle();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(iframeEl.navigatedTo).toContain('#t=initial');
+    finishReset();
+    await Promise.all([failed, recovered]);
+    expect(iframeEl.navigatedTo).toContain('#t=latest');
+    expect(emitted).toEqual([]);
+  });
+
+  it('does not mistake a blank frame after failed cleanup for confirmed cleanup', async () => {
+    const { component, emitted } = setup(() => 'token');
+    await component.componentDidLoad();
+    component.askFrameToClear = jest.fn(async () => null);
+    await component.clearToken();
+    await component.clearToken();
+    expect(component.askFrameToClear).toHaveBeenCalledTimes(2);
+    expect(emitted).toEqual([{ reason: 'token-clear-failed' }, { reason: 'token-clear-failed' }]);
+  });
+});
+
+describe('forced cleanup gate and reconnection', () => {
+  afterEach(() => { delete window.skyslope; jest.useRealTimers(); });
+
+  function setup(getToken: GetToken) {
+    const result = makeComponent(getToken);
+    window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    result.component.componentWillLoad();
+    result.component.resetFrame = jest.fn(async () => {
+      result.component.frameHasLoaded = false;
+      result.iframeEl.navigatedTo = undefined;
+    });
+    return result;
+  }
+
+  it.each([null, 'digisign'])('blocks reload, navigation and reconnect after %p cleanup until Forms confirms', async answer => {
+    const getToken = jest.fn(() => 'token');
+    const { component, iframeEl, emitted } = setup(getToken);
+    await component.componentDidLoad();
+    component.askFrameToClear = jest.fn(async () => answer);
+    await component.clearToken();
+    await component.reloadIframe();
+    await component.navigateTo();
+    component.disconnectedCallback();
+    window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    await component.connectedCallback();
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(iframeEl.navigatedTo).toBeUndefined();
+    expect(component.cleanupBlocked).toBe(true);
+    expect(emitted.every(e => e.reason === 'token-clear-failed')).toBe(true);
+    // Model a subsequent successful remote cleanup; blank-frame recovery itself cannot clear the gate.
+    component.askFrameToClear = async () => 'forms';
+    await component.clearToken();
+    expect(component.cleanupBlocked).toBe(false);
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(iframeEl.navigatedTo).toContain('#t=token');
+    component.disconnectedCallback();
+  });
+
+  it('reauthenticates the same container on reconnect and reload recovers a failed reconnect', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('first').mockReturnValueOnce(null).mockReturnValue('reconnected');
+    const { component, iframeEl } = setup(getToken);
+    await component.componentDidLoad();
+    component.disconnectedCallback();
+    expect(component.frameHasLoaded).toBe(false);
+    iframeEl.navigatedTo = undefined;
+    window.skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    await component.connectedCallback();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    await component.reloadIframe();
+    expect(iframeEl.navigatedTo).toContain('#t=reconnected');
+    component.disconnectedCallback();
+  });
+
+  it.each(['missing iframe', 'missing window', 'navigation throws'])('reports %s as a frame failure', async failure => {
+    const { component, iframeEl, emitted } = setup(() => 'token');
+    if (failure === 'missing iframe') component.iframe = () => null;
+    if (failure === 'missing window') iframeEl.contentWindow = null;
+    if (failure === 'navigation throws') iframeEl.contentWindow.location.replace = () => { throw new Error('blocked'); };
+    await component.componentDidLoad();
+    expect(emitted.map(e => e.reason)).toEqual(['iframe-auth-failed']);
+    expect(component.token).toBeNull();
+  });
+
+  it.each(['throw', 'timeout'])('preserves the documented %s callback error sequence without duplicates', async failure => {
+    jest.useFakeTimers();
+    const { component, emitted } = setup(() => {
+      if (failure === 'throw') throw new Error('callback unavailable');
+      return new Promise(() => {});
+    });
+    const loading = component.componentDidLoad();
+    if (failure === 'timeout') jest.advanceTimersByTime(30000);
+    await loading;
+    expect(emitted.map(e => e.reason)).toEqual(['token-callback-failed', 'iframe-auth-failed']);
+    expect(emitted[0].error).toBeInstanceOf(Error);
+  });
+});
