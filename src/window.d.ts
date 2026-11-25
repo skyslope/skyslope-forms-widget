@@ -51,13 +51,21 @@ export interface SkyslopeConfig {
    * When provided, the widget passes the token to the embedded Forms app (in the iframe URL
    * fragment for the first sign-in, by postMessage for renewals and for DigiSign) so it can
    * authenticate without third-party cookies. This is what lets the widget work in Safari (and
-   * other cookie-blocking browsers). Called only on the token path: after Forms reports its cookie
-   * sign-in failed, or when the frame is already signed in from a widget token (after a host reload
-   * or remount). May be sync or async. Returning null on the first sign-in raises authError on
+   * other cookie-blocking browsers). With forceTokenAuth it is called on every load. Otherwise it is
+   * called only on the token path: after Forms reports its cookie sign-in failed, or when the frame
+   * is already signed in from a widget token (after a host reload or remount). May be sync or async. Returning null on the first sign-in raises authError on
    * the container; during a renewal it is retried once before authError. Passing null
    * here is the same as leaving getToken out.
    */
   getToken?: GetTokenCallback | null;
+  /**
+   * Sign Forms in only with tokens from getToken, in every browser, never from the SkySlope
+   * cookie (which can belong to another user of the browser). The frame stays blank until
+   * getToken returns a token. Requires getToken. Defaults to false. The first initialize() on the
+   * page fixes it until the page reloads; a later call that leaves it out keeps it, and one that
+   * sets a different value is ignored with a console warning.
+   */
+  forceTokenAuth?: boolean;
 }
 
 export type WidgetHideableElement = 'breadcrumb' | 'add-forms';

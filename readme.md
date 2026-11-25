@@ -371,7 +371,7 @@ sees a "third-party cookies are disabled" message instead of Forms.
 To support them, pass a `getToken` callback that returns a SkySlope access token for the signed-in
 user. It may return the token or a promise of it, and should return `null` when there is no
 signed-in user. The widget calls it only when it needs a token, so browsers where the normal
-sign-in works never call it.
+sign-in works never call it unless `forceTokenAuth` is enabled.
 
 ```javascript
 window.skyslope.widget.initialize({
@@ -396,9 +396,14 @@ No new Content-Security-Policy or Referrer-Policy settings are needed on your pa
 
 ### Signing out or switching users
 
-The Forms session can outlast your own sign-out, even across a reload of your page. On sign-out or
-a user switch, call `await window.skyslope.widget.clearToken()` while the widget is still mounted.
-It ends the Forms session and reloads Forms without the old user.
+`clearToken()` alone does not end a SkySlope cookie session. In browsers that allow third-party
+cookies, Forms signs in from the SkySlope login cookie, not from your token. If two of your users
+share a browser, the widget can open as whoever last signed in to SkySlope there, even after
+`clearToken()`. If your users can switch accounts in one browser, use `forceTokenAuth` (below).
+
+On sign-out or a user switch, call `await window.skyslope.widget.clearToken()` while the widget is
+still mounted. It drops the session Forms built from your tokens, which otherwise outlasts your
+own sign-out, even across a reload of your page.
 
 Order matters: sign the user out of your app (or switch to the new user) first, so that
 `getToken` returns `null` (or the new user's token) by the time you call `clearToken()`. If it
@@ -413,6 +418,49 @@ async function signOut() {
 }
 ```
 
+### Always sign in with your token (`forceTokenAuth`)
+
+With `forceTokenAuth: true`, Forms signs in only with the token from your `getToken`, in every
+browser, and never from the SkySlope cookie. Use it when users can switch accounts in your app
+within one browser. Set it with `getToken` before each open:
+
+```javascript
+window.skyslope.widget.initialize({
+  forceTokenAuth: true,
+  getToken: async () => await myApp.getSkySlopeAccessToken(), // the current user's token, or null
+});
+```
+
+What changes:
+
+- The widget stays blank until `getToken` returns a token, then loads Forms with it. It asks for a
+  fresh token on every load, including `reload()` and `navigateTo()`.
+- With no token (`getToken` missing, returning `null`, throwing or timing out), the widget stays
+  blank and raises `authError`. It never falls back to the cookie. `reload()` tries again.
+- When Forms needs a new token mid-session, the widget asks `getToken` and reloads with it. If
+  Forms still cannot sign in with the new token, the widget goes blank and raises
+  `iframe-auth-failed` rather than reloading again.
+- The first `initialize()` on the page fixes the mode until the page reloads. A later
+  `initialize()` that leaves `forceTokenAuth` out keeps the mode, even after the widget closes, so
+  a forgotten option cannot open the previous user. A later call that sets a different value is
+  ignored, with a console warning. Set it in your first `initialize()`, before the widget mounts.
+  Still pass `getToken` on every `initialize()`: without it the widget stays blank.
+- Signing out inside the widget signs the user out of the widget only. It does not sign anyone
+  out of SkySlope elsewhere in the browser. The widget goes blank and raises `signed-out`.
+
+To switch users, use the same order as above:
+
+1. Switch to the new user in your app.
+2. Make sure `getToken` now returns the new user's token, or `null` if nobody is signed in.
+3. Call `await window.skyslope.widget.clearToken()`.
+
+`clearToken()` hides the frame, asks Forms to drop the old session (up to three seconds), then
+loads the new user's token into a new frame. If nobody is signed in, the widget stays blank and raises
+`iframe-auth-failed`, or `token-clear-failed` when Forms did not confirm that it dropped the old
+session (for example while DigiSign was open). In that case the old session can stay stored in
+this browser tab, so keep `forceTokenAuth` on for every later open in the tab. A forced load
+always replaces a stored session with the new token.
+
 ### Call `initialize()` before each open
 
 When the widget's container leaves the page (including when `closeModal()` closes the modal),
@@ -424,10 +472,17 @@ a second open in Safari.
 
 ```javascript
 function openForms() {
-  window.skyslope.widget.initialize({ getToken: myApp.getSkySlopeAccessToken });
+  window.skyslope.widget.initialize({
+    forceTokenAuth: true, // if you use it; see "Always sign in with your token"
+    getToken: myApp.getSkySlopeAccessToken,
+  });
   window.skyslope.widget.openModal();
 }
 ```
+
+The pre-made buttons open the modal themselves. To configure the widget before each of their
+opens, set `window.skyslope.onLoad` to a function that calls `initialize()`: the widget runs it
+each time it resets.
 
 ### The `authError` event
 
@@ -441,6 +496,9 @@ bubbles out of `ss-container-modal`, so you can listen on either element (in typ
   `getToken` returned `null` or is not configured.
 - `token-renewal-failed`: the widget could not get a new token to keep the session signed in. The
   current session keeps working until it expires.
+- `token-clear-failed`: with `forceTokenAuth`, `clearToken()` found no next user and Forms did not
+  confirm it dropped the old session. The widget is blank; see
+  [Always sign in with your token](#always-sign-in-with-your-token-forcetokenauth).
 - `signed-out`: the user signed out inside Forms or DigiSign. The widget has stopped renewing; sign
   the user out of your app or close the widget.
 
