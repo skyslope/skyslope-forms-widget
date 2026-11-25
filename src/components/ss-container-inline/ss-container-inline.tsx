@@ -87,56 +87,23 @@ export type WidgetAuthErrorReason = 'token-callback-failed' | 'iframe-auth-faile
 export class SsContainerInline {
   @Element() el: HTMLSsContainerInlineElement;
 
-  @State() private frameKey = 0;
-  private forceTokenAuth = false;
-  private disposed = false;
-  private frameHasLoaded = false;
-  // Remains true after an unconfirmed clear, even if the visible frame is now blank.
-  private needsRemoteClear = false;
-  private cleanupBlocked = false;
-  private hasLoadedComponent = false;
-  private connectionGeneration = 0;
-  private forcedClearing: Promise<boolean> | null = null;
-  private frameReset: Promise<void> | null = null;
-  private resolveFrameReset: (() => void) | null = null;
-
-  componentWillLoad() {
-    // Authentication policy is fixed for this mounted container.
-    this.forceTokenAuth = window.skyslope?.widget?.forceTokenAuth === true;
-  }
-
-  componentDidRender() {
-    this.resolveFrameReset?.();
-    this.resolveFrameReset = null;
-    this.frameReset = null;
-  }
-
-  private resetFrame(): Promise<void> {
-    this.frameHasLoaded = false;
-    this.frameReset ??= new Promise(resolve => {
-      this.resolveFrameReset = resolve;
-      this.frameKey++;
-    });
-    return this.frameReset;
-  }
-
   /**
    * Emitted when sign-in inside the frame cannot be established or kept, so the host can react
    * (e.g. re-authenticate the user). reason is 'token-callback-failed' when getToken throws or
    * times out, 'iframe-auth-failed' when Forms or DigiSign could not sign in inside the frame,
    * 'token-renewal-failed' when a renewal failed twice, and 'signed-out' when the user signed out
-   * inside Forms or DigiSign during a token session. 'token-clear-failed' means forced-mode
-   * cleanup was not confirmed by Forms; the frame is blank but stored sessions may remain.
+   * inside Forms or DigiSign during a token session. 'token-clear-failed' (forceTokenAuth only)
+   * when clearToken() found no next user and Forms did not confirm it dropped the old session.
    */
   @Event({ bubbles: true, composed: true }) authError: EventEmitter<{ reason: WidgetAuthErrorReason; error?: unknown }>;
 
   // The token most recently fetched from the host and handed to the app in the frame. Null outside
-  // token mode. Forced authentication enters token mode before the first Forms load.
+  // token mode, so browsers whose cookie sign-in works never get one.
   private token: string | null = null;
 
   // True while the frame runs on a token session: set when Forms hits the cookie wall and the host
-  // has a getToken, when the host forces token authentication, or when Forms reports a session
-  // restored from a widget token (after a host reload or a remount). Only then are tokens fetched and sent. A second cookie wall in this mode
+  // has a getToken, or when Forms reports a session restored from a widget token (after a host
+  // reload or a remount). Only then are tokens fetched and sent. A second cookie wall in this mode
   // is reported instead of reloading again, which would loop.
   private tokenMode = false;
 
@@ -369,6 +336,7 @@ export class SsContainerInline {
 
     this.lastInstalledExpiry = installedExpiry;
     this.renewalRetryUsed = false;
+    this.autoReloadUsed = false;
     this.scheduleRenewal(installedExpiry);
   }
 
@@ -405,6 +373,9 @@ export class SsContainerInline {
     // An opaque origin (file://, sandboxed frame) reports the string "null": nothing useful to send.
     const frameOrigin = window.location.origin;
     if (frameOrigin && frameOrigin !== 'null') params.frameOrigin = frameOrigin;
+    // Tells Forms to sign in only from the #t= token we send, never from the SkySlope cookie,
+    // which can belong to another user who signed in to SkySlope in this browser.
+    if (this.forceTokenAuth) params.tokenOnly = '1';
 
     if (widget.idp) params.idp = widget.idp;
     if (widget.headerVariant) params.headerVariant = widget.headerVariant;
@@ -419,9 +390,8 @@ export class SsContainerInline {
   private iframe = () => this.el.shadowRoot?.getElementById('ss-container-iframe') as HTMLIFrameElement | null;
 
   private reloadIframe = () => {
-    if (this.forceTokenAuth && (!this.frameHasLoaded || this.frameReset != null)) {
-      return this.navigateForced();
-    }
+    // A reload Forms runs itself would carry no token, so forced mode loads a fresh one instead.
+    if (this.forceTokenAuth) return this.loadForced();
     this.postToFrame('forms', 'reload');
   };
 
@@ -440,10 +410,9 @@ export class SsContainerInline {
       if (iframe.contentWindow == null) return false;
       // The token goes in the fragment, which is never sent to the server. Forms strips it on read.
       iframe.contentWindow.location.replace(`${url}#t=${encodeURIComponent(this.token)}`);
-      this.frameHasLoaded = true;
-      this.needsRemoteClear = true;
       return true;
     }
+    // Forced mode never loads Forms without a token: Forms would sign in from the cookie.
     if (this.forceTokenAuth) return false;
     iframe.src = url;
     return true;
@@ -453,95 +422,22 @@ export class SsContainerInline {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
     // leaves the token null, so navigation never introduces a token.
-    if (this.forceTokenAuth) return this.navigateForced();
+    if (this.forceTokenAuth) return this.loadForced();
     const generation = this.sessionGeneration;
     if (this.tokenMode) await this.fetchHostToken();
     if (generation !== this.sessionGeneration) return;
     this.loadFrame();
   };
 
-  private navigateForced = async (): Promise<void> => {
-    if (this.forcedClearing != null || this.disposed) return;
-    if (this.cleanupBlocked) {
-      this.authError.emit({ reason: 'token-clear-failed' });
-      return;
-    }
-    // Latest navigation wins, including token results and errors from earlier requests.
-    const generation = this.endTokenSession();
-    this.tokenMode = true;
-    this.adoptionBlocked = false;
-    if (this.frameReset != null) await this.frameReset;
-    if (generation !== this.sessionGeneration) return;
-    await this.fetchHostToken();
-    if (generation !== this.sessionGeneration) return;
-    if (this.frameReset != null) await this.frameReset;
-    if (generation !== this.sessionGeneration) return;
-    if (this.token == null) {
-      this.tokenMode = false;
-      if (this.frameHasLoaded) await this.resetFrame();
-      if (generation !== this.sessionGeneration) return;
-      this.authError.emit({ reason: 'iframe-auth-failed' });
-      return;
-    }
-    try {
-      if (this.loadFrame()) {
-        this.scheduleRenewal(this.decodeExpiry(this.token));
-        return;
-      }
-    } catch (error) {
-      this.endTokenSession();
-      this.authError.emit({ reason: 'iframe-auth-failed', error });
-      return;
-    }
-    this.endTokenSession();
-    this.authError.emit({ reason: 'iframe-auth-failed' });
-  };
-
   // Forget the user. Exposed to the host as widget.clearToken() for sign-out or a user switch:
   // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
   // otherwise outlast the host's own sign-out.
   private clearToken = (): Promise<void> => {
-    if (this.forceTokenAuth) return this.clearForcedToken();
+    if (this.forceTokenAuth) return this.clearForced();
     this.clearing ??= this.runClear().finally(() => {
       this.clearing = null;
     });
     return this.clearing;
-  };
-
-  private clearForcedToken = async (): Promise<void> => {
-    // Every caller invalidates pending tokens, even while sharing the remote clear handshake.
-    const generation = this.endTokenSession();
-    this.adoptionBlocked = true;
-    this.cleanupBlocked ||= this.needsRemoteClear;
-    this.forcedClearing ??= this.clearForcedFrame().finally(() => {
-      this.forcedClearing = null;
-    });
-    const cleared = await this.forcedClearing;
-    if (generation !== this.sessionGeneration || !cleared) return;
-    // Reauthentication is outside the shared clearing operation. A later logout cancels it.
-    await this.handleAuthFailed();
-  };
-
-  private clearForcedFrame = async (): Promise<boolean> => {
-    const connection = this.connectionGeneration;
-    const answeredBy = this.needsRemoteClear ? await this.askFrameToClear() : 'forms';
-    if (this.disposed || connection !== this.connectionGeneration) return false;
-    if (answeredBy === 'forms') {
-      this.needsRemoteClear = false;
-      this.cleanupBlocked = false;
-    }
-    // Replacing the iframe discards its WindowProxy and pending navigations. Queued messages
-    // from the old document fail the event.source check, even after a new sign-in starts.
-    await this.resetFrame();
-    if (this.disposed || connection !== this.connectionGeneration) return false;
-    this.frameApp = 'forms';
-    if (answeredBy !== 'forms') {
-      // DigiSign cannot clear Forms storage. Loading the Forms clear fragment would allow cookie
-      // authentication, so fail closed until the remote apps support cookie-free cross-app clear.
-      this.authError.emit({ reason: 'token-clear-failed' });
-      return false;
-    }
-    return true;
   };
 
   private runClear = async (): Promise<void> => {
@@ -656,6 +552,8 @@ export class SsContainerInline {
     if (!this.tokenMode) return;
     this.endTokenSession();
     this.adoptionBlocked = true;
+    // In forced mode, blank the frame too: the host decides what loads next.
+    if (this.forceTokenAuth) void this.replaceFrame();
     this.authError.emit({ reason: 'signed-out' });
   }
 
@@ -663,7 +561,7 @@ export class SsContainerInline {
   // with a getToken (browsers whose cookie sign-in works never get a token) and not right after
   // an in-frame sign-out. Returns whether token mode is now on.
   private adoptTokenSession(): boolean {
-    if (readGetToken() == null || this.adoptionBlocked || this.cleanupBlocked) return false;
+    if (readGetToken() == null || this.adoptionBlocked) return false;
     this.tokenMode = true;
     return true;
   }
@@ -697,6 +595,8 @@ export class SsContainerInline {
   private handleMessage = (event: MessageEvent) => {
     const frameWindow = this.iframe()?.contentWindow;
     if (frameWindow == null || event.source !== frameWindow) return;
+    // The frame is about to be swapped for a blank one: whatever its page still says is stale.
+    if (this.frameReplaced != null) return;
     let data: FrameMessage;
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
@@ -716,7 +616,6 @@ export class SsContainerInline {
     this.frameApp = app;
     switch (data.status) {
       case FORMS_AUTH_FAILED:
-        if (this.forcedClearing != null) break;
         void this.handleAuthFailed();
         break;
       case FORMS_SESSION_EXPIRY:
@@ -753,6 +652,8 @@ export class SsContainerInline {
     // later Forms sign-in failure would no longer switch to the token path.
     const exp = expToMs(data.exp);
     if (exp == null) return;
+    // Forms is signed in, so a later forms-auth-failed may reload once more.
+    if (this.forceTokenAuth) this.autoReloadUsed = false;
     if (!this.tokenMode && (data.sessionless !== true || !this.adoptTokenSession())) return;
     this.scheduleRenewal(exp);
   }
@@ -762,12 +663,11 @@ export class SsContainerInline {
   // with it in the #t= fragment. With no getToken, or when the token path already failed, tell the
   // host.
   private handleAuthFailed = async () => {
-    if (this.forcedClearing != null) return;
+    if (this.forceTokenAuth) return this.handleForcedAuthFailed();
     if (readGetToken() == null || this.tokenMode) {
       this.authError.emit({ reason: 'iframe-auth-failed' });
       return;
     }
-    if (this.forceTokenAuth) return this.navigateForced();
     this.tokenMode = true;
     // A new sign-in: the user is past any sign-out inside the frame.
     this.adoptionBlocked = false;
@@ -790,8 +690,141 @@ export class SsContainerInline {
     this.scheduleRenewal(this.decodeExpiry(this.token));
   };
 
+  // Forced token authentication: initialize({ forceTokenAuth: true, getToken }).
+  //
+  // The host signs the user in to Forms only with its own tokens, never with the SkySlope cookie,
+  // which can belong to someone else who used SkySlope in this browser. Every load goes through
+  // loadForced(): a fresh token from getToken, then the Forms URL with tokenOnly=1 and #t=<token>.
+  // With no token the frame stays blank and the host gets an authError.
+
+  // Fixed for this container when it first loads; a later initialize() does not change it.
+  private forceTokenAuth = false;
+
+  // Changing it makes Stencil replace the iframe with a new, blank one (see replaceFrame).
+  @State() private frameKey = 0;
+
+  // Resolves once the blank replacement frame has rendered. Null when none is pending.
+  private frameReplaced: Promise<void> | null = null;
+  private resolveFrameReplaced: (() => void) | null = null;
+
+  // True once the current iframe has been pointed at Forms; false while it is blank.
+  private frameUsed = false;
+
+  // Forms may ask for a new token (forms-auth-failed) and get one reload for it. Set again when
+  // Forms reports a live session or the host starts a load, so a token Forms keeps refusing is
+  // reported instead of reloading forever.
+  private autoReloadUsed = false;
+
+  // The clear handshake in progress, shared by clearToken() calls that overlap.
+  private forcedClearing: Promise<boolean> | null = null;
+
+  // True after the first load, so a reconnect can tell itself apart from the first mount.
+  private hasLoaded = false;
+
+  // Swap in a new, blank iframe. The old frame's window goes away with anything it still had
+  // queued, so its late messages fail the event.source check.
+  private replaceFrame(): Promise<void> {
+    this.frameUsed = false;
+    this.frameReplaced ??= new Promise(resolve => {
+      this.resolveFrameReplaced = resolve;
+      this.frameKey++;
+    });
+    return this.frameReplaced;
+  }
+
+  componentDidRender() {
+    this.resolveFrameReplaced?.();
+    this.resolveFrameReplaced = null;
+    this.frameReplaced = null;
+  }
+
+  // Load Forms for whoever the host says is signed in now. hostAction is false only for our own
+  // reload after forms-auth-failed. noTokenReason is what the host hears when getToken has no token.
+  private loadForced = async (hostAction = true, noTokenReason: WidgetAuthErrorReason = 'iframe-auth-failed'): Promise<void> => {
+    // The latest load wins: a token still on its way for an earlier one is dropped.
+    const generation = this.endTokenSession();
+    this.adoptionBlocked = false;
+    if (hostAction) this.autoReloadUsed = false;
+    // A clear still running blanks the frame when its handshake ends, so load after it.
+    if (this.forcedClearing != null) await this.forcedClearing;
+    if (generation !== this.sessionGeneration) return;
+    await this.fetchHostToken();
+    if (generation !== this.sessionGeneration) return;
+    if (this.token == null) return this.failClosed(noTokenReason);
+    // Send the token to the new frame, not the one being replaced.
+    if (this.frameReplaced != null) await this.frameReplaced;
+    if (generation !== this.sessionGeneration) return;
+    this.tokenMode = true;
+    let loaded = false;
+    let error: unknown;
+    try {
+      loaded = this.loadFrame();
+    } catch (caught) {
+      error = caught;
+    }
+    if (!loaded) return this.failClosed('iframe-auth-failed', error);
+    this.frameUsed = true;
+    this.scheduleRenewal(this.decodeExpiry(this.token));
+  };
+
+  // No usable token: tell the host, and blank the frame rather than leave the last page up.
+  private failClosed(reason: WidgetAuthErrorReason, error?: unknown): void {
+    this.endTokenSession();
+    if (this.frameUsed) void this.replaceFrame();
+    this.authError.emit(error === undefined ? { reason } : { reason, error });
+  }
+
+  // Forms has no session (its token ran out, or it could not use the one we sent) and is waiting
+  // for a token instead of signing in from the cookie.
+  private handleForcedAuthFailed(): void {
+    // A clear in progress loads the next user itself.
+    if (this.forcedClearing != null) return;
+    if (this.autoReloadUsed) {
+      this.failClosed('iframe-auth-failed');
+      return;
+    }
+    this.autoReloadUsed = true;
+    void this.loadForced(false);
+  }
+
+  // Sign-out or user switch in forced mode. The host has already switched, so getToken now
+  // returns the new user's token, or null after a sign-out.
+  private clearForced = async (): Promise<void> => {
+    // Every call drops pending token work, even one that joins a clear already running.
+    const generation = this.endTokenSession();
+    this.adoptionBlocked = true;
+    this.forcedClearing ??= this.clearForcedFrame().finally(() => {
+      this.forcedClearing = null;
+    });
+    const confirmed = await this.forcedClearing;
+    // A later clear, load or unmount took over.
+    if (generation !== this.sessionGeneration) return;
+    // Loading the next user's token replaces whatever session Forms kept, so an unconfirmed clear
+    // matters only when there is no next user.
+    await this.loadForced(true, confirmed ? 'iframe-auth-failed' : 'token-clear-failed');
+  };
+
+  // Ask the app in the frame to drop its session, then start swapping in a blank frame. Resolves
+  // with whether Forms confirmed. A frame that never loaded has nothing to clear. Never waits on
+  // a render, so a clear cannot hang while the container is detached.
+  private clearForcedFrame = async (): Promise<boolean> => {
+    if (!this.frameUsed) return true;
+    const answeredBy = await this.askFrameToClear();
+    void this.replaceFrame();
+    this.frameApp = 'forms';
+    return answeredBy === 'forms';
+  };
+
+  componentWillLoad() {
+    this.forceTokenAuth = window.skyslope?.widget?.forceTokenAuth === true;
+  }
+
+  componentDidLoad() {
+    this.hasLoaded = true;
+    if (this.forceTokenAuth) return this.loadForced();
+  }
+
   connectedCallback() {
-    this.disposed = false;
     const { widget } = window.skyslope ?? {};
     widget?.registerReload(this.reloadIframe);
     widget?.registerNavigateTo(this.navigateTo);
@@ -799,41 +832,17 @@ export class SsContainerInline {
     widget?.registerClearToken(this.clearToken);
     window.addEventListener('message', this.handleMessage);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    if (this.hasLoadedComponent && this.forceTokenAuth) return this.restartOnReconnect();
-  }
-
-  private restartOnReconnect = async (): Promise<void> => {
-    const generation = this.sessionGeneration;
-    if (this.forcedClearing != null) await this.forcedClearing;
-    if (this.disposed || generation !== this.sessionGeneration) return;
-    await this.startForcedAuth();
-  };
-
-  componentDidLoad() {
-    this.hasLoadedComponent = true;
-    if (this.forceTokenAuth) return this.startForcedAuth();
-  }
-
-  private startForcedAuth(): Promise<void> {
-    // The iframe already exists; sign-in does not depend on Stencil awaiting this promise.
-    // Callback throws/timeouts are already handled by fetchHostToken. This catches only
-    // unexpected startup failures; the documented callback-error sequence is unchanged.
-    return this.handleAuthFailed().catch(error => {
-      this.authError.emit({ reason: 'iframe-auth-failed', error });
-    });
+    // The same container attached again: its frame lost its page when it left the document.
+    if (this.forceTokenAuth && this.hasLoaded) return this.loadForced();
   }
 
   disconnectedCallback() {
-    this.disposed = true;
-    this.connectionGeneration++;
-    this.frameHasLoaded = false;
     window.removeEventListener('message', this.handleMessage);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     // Stops renewals, and token work still waiting on the host.
     this.endTokenSession();
-    this.resolveFrameReset?.();
-    this.resolveFrameReset = null;
-    this.frameReset = null;
+    // A detached iframe loses its page.
+    this.frameUsed = false;
     // this is not actually needed, but I think makes more sense to reinitialize the globalScript stuff if this component isn't alive
     reinitializeGlobalScript();
   }
@@ -847,6 +856,7 @@ export class SsContainerInline {
           frameborder="0"
           allowfullScreen
           title="SkySlope Forms"
+          // Forced mode starts blank: no Forms page loads until there is a token.
           src={this.forceTokenAuth ? undefined : this.getUrl()}
           style={{ backgroundColor: '#f4f8fc' }}
         />

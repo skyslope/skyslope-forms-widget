@@ -59,8 +59,10 @@ export interface SkyslopeConfig {
    */
   getToken?: GetTokenCallback | null;
   /**
-   * Start with access-token authentication even when cookies work. Requires getToken.
-   * Defaults to false. Configure before mounting the container.
+   * Sign Forms in only with tokens from getToken, in every browser, never from the SkySlope
+   * cookie (which can belong to another user of the browser). The frame stays blank until
+   * getToken returns a token. Requires getToken. Defaults to false. Read once when the container
+   * mounts.
    */
   forceTokenAuth?: boolean;
 }
