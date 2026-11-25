@@ -440,11 +440,11 @@ What changes:
 - When Forms needs a new token mid-session, the widget asks `getToken` and reloads with it. If
   Forms still cannot sign in with the new token, the widget goes blank and raises
   `iframe-auth-failed` rather than reloading again.
-- Once a page sets `forceTokenAuth`, it stays on until the page reloads, even after the widget
-  closes and even if a later `initialize()` leaves it out. A forced widget never falls back to the
-  cookie, so a forgotten option cannot open the previous user. Still pass `getToken` on every
-  `initialize()`: without it the widget stays blank. A widget that was already open when you
-  turned the option on switches to it at its next `reload()`, `navigateTo()` or `clearToken()`.
+- The first `initialize()` on the page fixes the mode until the page reloads. A later
+  `initialize()` that leaves `forceTokenAuth` out keeps the mode, even after the widget closes, so
+  a forgotten option cannot open the previous user. A later call that sets a different value is
+  ignored, with a console warning. Set it in your first `initialize()`, before the widget mounts.
+  Still pass `getToken` on every `initialize()`: without it the widget stays blank.
 - Signing out inside the widget signs the user out of the widget only. It does not sign anyone
   out of SkySlope elsewhere in the browser. The widget goes blank and raises `signed-out`.
 

@@ -10,10 +10,10 @@ export function readGetToken(): GetTokenCallback | null {
   return storedGetToken;
 }
 
-// Once a page asks for forceTokenAuth it keeps it until the page reloads, even when a container
-// closes (which resets every other setting) and the host forgets to pass it on the next open.
-// Falling back to the cookie then would open the widget as whoever owns the SkySlope cookie.
-let forceTokenAuthForPage = false;
+// The first initialize() on the page fixes forceTokenAuth until the page reloads. A close resets
+// every other setting, but not this one: a reopen that leaves it out must not fall back to the
+// cookie, which would open the widget as whoever owns the SkySlope cookie. Null until decided.
+let forceTokenAuthForPage: boolean | null = null;
 
 // True while a forced Forms session may still be stored in this tab: one loaded and not since
 // confirmed cleared. Kept here so it outlives the container that loaded it.
@@ -29,7 +29,7 @@ export function setForcedSessionMayRemain(value: boolean): void {
 
 // Only for specs, which share this module across cases.
 export function resetForceTokenAuthForTests(): void {
-  forceTokenAuthForPage = false;
+  forceTokenAuthForPage = null;
   forcedSessionMayRemain = false;
 }
 
@@ -69,7 +69,12 @@ export class SkySlopeWidget {
     this._hide = Array.isArray(hide) ? HIDEABLE_ELEMENTS.filter(element => hide.includes(element)) : [];
     this._logoClickable = logoClickable !== false;
     storedGetToken = getToken ?? null;
-    if (forceTokenAuth === true) forceTokenAuthForPage = true;
+    if (forceTokenAuthForPage == null) {
+      forceTokenAuthForPage = forceTokenAuth === true;
+    } else if (forceTokenAuth != null && forceTokenAuth !== forceTokenAuthForPage) {
+      // Switching mode on a page that already has one is not supported; leaving it out keeps it.
+      console.warn(`skyslope widget: forceTokenAuth is already ${forceTokenAuthForPage} for this page; ignoring the change.`);
+    }
   };
 
   openModal = (
@@ -155,7 +160,7 @@ export class SkySlopeWidget {
   };
 
   get forceTokenAuth(): boolean {
-    return forceTokenAuthForPage;
+    return forceTokenAuthForPage === true;
   }
 
   get openInline(): boolean {

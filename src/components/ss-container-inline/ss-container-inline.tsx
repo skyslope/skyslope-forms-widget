@@ -392,7 +392,6 @@ export class SsContainerInline {
   private iframe = () => this.el.shadowRoot?.getElementById('ss-container-iframe') as HTMLIFrameElement | null;
 
   private reloadIframe = () => {
-    this.takeUpForcedPolicy();
     // A reload Forms runs itself would carry no token, so forced mode loads a fresh one instead.
     if (this.forceTokenAuth) return this.loadForced();
     this.postToFrame('forms', 'reload');
@@ -434,7 +433,6 @@ export class SsContainerInline {
     // Only carry a token forward once the cookie-free fallback is active; refresh it first so a
     // navigation late in a session doesn't reuse a stale one. In the normal (cookie) path this
     // leaves the token null, so navigation never introduces a token.
-    this.takeUpForcedPolicy();
     if (this.forceTokenAuth) return this.loadForced();
     const generation = this.sessionGeneration;
     if (this.tokenMode) await this.fetchHostToken();
@@ -446,7 +444,6 @@ export class SsContainerInline {
   // the session Forms built from our tokens lives in the Forms tab's sessionStorage and would
   // otherwise outlast the host's own sign-out.
   private clearToken = (): Promise<void> => {
-    this.takeUpForcedPolicy();
     if (this.forceTokenAuth) return this.clearForced();
     this.clearing ??= this.runClear().finally(() => {
       this.clearing = null;
@@ -565,14 +562,14 @@ export class SsContainerInline {
   // The user signed out inside Forms or DigiSign, which already dropped its session. Stop renewing
   // and hand out no more tokens (a later token ask is refused until the cookie wall starts a new
   // sign-in), and leave the frame where it is: a reload would sign the user straight back in.
-  private handleSignedOut(): void {
+  private handleSignedOut(app: FrameApp = 'forms'): void {
     if (!this.tokenMode) return;
     this.endTokenSession();
     this.adoptionBlocked = true;
-    // In forced mode, blank the frame too: the host decides what loads next. Forms dropped its
-    // session itself.
+    // In forced mode, blank the frame too: the host decides what loads next. Only a Forms sign-out
+    // drops the Forms session; DigiSign cannot reach it.
     if (this.forceTokenAuth) {
-      setForcedSessionMayRemain(false);
+      if (app === 'forms') setForcedSessionMayRemain(false);
       void this.replaceFrame();
     }
     this.authError.emit({ reason: 'signed-out' });
@@ -645,7 +642,7 @@ export class SsContainerInline {
         break;
       case FORMS_SIGNED_OUT:
       case DIGISIGN_SIGNED_OUT:
-        this.handleSignedOut();
+        this.handleSignedOut(app);
         break;
       case DIGISIGN_AUTH_REQUIRED:
         void this.handleDigisignAuthRequired();
@@ -736,10 +733,6 @@ export class SsContainerInline {
   // token Forms keeps refusing cannot reload forever.
   private lastAutoReloadAt = 0;
 
-  // The path of the last forced load, so a container moved in the page reopens where it was (the
-  // move resets the global path).
-  private lastPath = '';
-
   // The newest clearToken() run; earlier callers wait for it, so none resolves mid-switch.
   private latestForcedClear: Promise<void> | null = null;
 
@@ -798,7 +791,6 @@ export class SsContainerInline {
     }
     if (!loaded) return this.failClosed('iframe-auth-failed', error);
     this.frameUsed = true;
-    this.lastPath = window.skyslope?.widget?.path ?? '';
     setForcedSessionMayRemain(true);
     this.scheduleRenewal(this.decodeExpiry(this.token));
   };
@@ -862,28 +854,6 @@ export class SsContainerInline {
     return answeredBy === 'forms';
   };
 
-  // Back at the path it was on, if the host has not set another.
-  private reopenForced(): Promise<void> {
-    const widget = window.skyslope?.widget;
-    if (widget != null && widget.path === '' && this.lastPath !== '') {
-      widget.navigateTo(this.lastPath);
-      return Promise.resolve();
-    }
-    return this.loadForced();
-  }
-
-  // A container that mounted in default mode switches to forced mode once the page asks for it, at
-  // its next reattach, reload, navigation or clear. Its current page is a cookie session, so it
-  // counts as used and as a session that may remain. Returns whether it switched now.
-  private takeUpForcedPolicy(): boolean {
-    if (this.forceTokenAuth || window.skyslope?.widget?.forceTokenAuth !== true) return false;
-    this.endTokenSession();
-    this.forceTokenAuth = true;
-    this.frameUsed = this.hasLoaded;
-    if (this.hasLoaded) setForcedSessionMayRemain(true);
-    return true;
-  }
-
   componentWillLoad() {
     this.forceTokenAuth = window.skyslope?.widget?.forceTokenAuth === true;
   }
@@ -901,9 +871,8 @@ export class SsContainerInline {
     widget?.registerClearToken(this.clearToken);
     window.addEventListener('message', this.handleMessage);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    if (!this.hasLoaded) return;
     // The same container attached again: its frame lost its page when it left the document.
-    if (this.takeUpForcedPolicy() || this.forceTokenAuth) return this.reopenForced();
+    if (this.forceTokenAuth && this.hasLoaded) return this.loadForced();
   }
 
   disconnectedCallback() {

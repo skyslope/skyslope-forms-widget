@@ -724,48 +724,6 @@ describe('forced mode: review round 2 fixes', () => {
     return { component, emitted, frame };
   }
 
-  it('a default container reattached after the page turned on forceTokenAuth reloads in forced mode', async () => {
-    const getToken = jest.fn(() => 'user-b');
-    const { component, frames, frame } = forced(getToken, { force: false });
-    component.connectedCallback();
-    await component.componentDidLoad();
-    expect(component.forceTokenAuth).toBe(false);
-    component.disconnectedCallback();
-    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
-    await component.connectedCallback();
-    await settle();
-    expect(component.forceTokenAuth).toBe(true);
-    // The cookie page's frame is swapped out, and the new one loads with a token.
-    expect(frames).toHaveLength(2);
-    expectTokenLoad(frame().loads[0], 'user-b');
-    expect(component.render().$children$[0].$attrs$.src).toBeUndefined();
-  });
-
-  it.each(['reloadIframe', 'navigateTo'])('a default container switches to forced mode on %s once the page turned it on', async method => {
-    const getToken = jest.fn(() => 'user-b');
-    const { component, frames, frame } = forced(getToken, { force: false });
-    await component.componentDidLoad();
-    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
-    await component[method]();
-    await settle();
-    expect(frames).toHaveLength(2);
-    expectTokenLoad(frame().loads[0], 'user-b');
-  });
-
-  it('a default container switches to the forced clear once the page turned on forceTokenAuth', async () => {
-    const getToken = jest.fn(() => 'user-b');
-    const { component, frames, frame } = forced(getToken, { force: false });
-    await component.componentDidLoad();
-    const cookieFrame = frame();
-    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
-    component.askFrameToClear = jest.fn(async () => 'forms');
-    await component.clearToken();
-    expect(component.askFrameToClear).toHaveBeenCalledTimes(1);
-    expect(cookieFrame.src).toBe('');
-    expect(frames).toHaveLength(2);
-    expectTokenLoad(frame().loads[0], 'user-b');
-  });
-
   it('a detach ends the clear handshake, so the reattached frame still gets its C4 reload', async () => {
     jest.useFakeTimers();
     const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValueOnce('user-b').mockReturnValue('user-b2');
@@ -862,6 +820,38 @@ describe('forced mode: review round 2 fixes', () => {
     expect(emitted).toEqual([{ reason: 'token-clear-failed' }]);
   });
 
+  it('ignores a later initialize() that tries to change the mode, with a warning', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    forced(() => 'user-a');
+    const widget = (window as any).skyslope.widget;
+    widget.initialize({ forceTokenAuth: false, getToken: () => 'user-a' });
+    expect(widget.forceTokenAuth).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // Leaving it out keeps the mode quietly.
+    widget.initialize({ getToken: () => 'user-a' });
+    expect(widget.forceTokenAuth).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a page that first initialized without it does not switch to forced mode later', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    forced(() => 'user-a', { force: false });
+    const widget = (window as any).skyslope.widget;
+    widget.initialize({ forceTokenAuth: true, getToken: () => 'user-a' });
+    expect(widget.forceTokenAuth).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a DigiSign sign-out keeps the note that a Forms session may remain', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue(null);
+    const { component, frame, emitted } = forced(getToken);
+    await component.componentDidLoad();
+    component.handleMessage(message(frame(), { status: 'digisign-signed-out' }, DIGISIGN_ORIGIN));
+    await settle();
+    await component.clearToken();
+    expect(emitted).toEqual([{ reason: 'signed-out' }, { reason: 'token-clear-failed' }]);
+  });
+
   it('treats an empty token as no token', async () => {
     const { component, frame, emitted } = forced(() => '');
     await component.componentDidLoad();
@@ -869,20 +859,4 @@ describe('forced mode: review round 2 fixes', () => {
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
   });
 
-  it('a moved container reopens at the path it was on', async () => {
-    const getToken = jest.fn(() => 'user-a');
-    const { component, frame } = forced(getToken);
-    component.connectedCallback();
-    await component.componentDidLoad();
-    await (window as any).skyslope.widget.navigateTo('envelopes/1/fill');
-    await settle();
-    component.disconnectedCallback();
-    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
-    component.connectedCallback();
-    await settle(30);
-    const url = new URL(frame().loads[frame().loads.length - 1]);
-    expect(url.pathname.endsWith('/envelopes/1/fill')).toBe(true);
-    expectTokenLoad(url.toString(), 'user-a');
-    component.disconnectedCallback();
-  });
 });
