@@ -10,6 +10,16 @@ export function readGetToken(): GetTokenCallback | null {
   return storedGetToken;
 }
 
+// Once a page asks for forceTokenAuth it keeps it until the page reloads, even when a container
+// closes (which resets every other setting) and the host forgets to pass it on the next open.
+// Falling back to the cookie then would open the widget as whoever owns the SkySlope cookie.
+let forceTokenAuthForPage = false;
+
+// Only for specs, which share this module across cases.
+export function resetForceTokenAuthForTests(): void {
+  forceTokenAuthForPage = false;
+}
+
 // Kept in step with WidgetHideableElement. Anything else a host passes is dropped, so only values
 // Forms knows reach its URL.
 const HIDEABLE_ELEMENTS: readonly WidgetHideableElement[] = ['breadcrumb', 'add-forms'];
@@ -21,7 +31,6 @@ export class SkySlopeWidget {
   private _headerVariant: string | null;
   private _hide: WidgetHideableElement[];
   private _logoClickable: boolean;
-  private _forceTokenAuth = false;
   private _reloadCallback: () => void;
   private _navigateCallback: (path: string) => void;
   private _refreshCallback: () => Promise<void>;
@@ -47,7 +56,7 @@ export class SkySlopeWidget {
     this._hide = Array.isArray(hide) ? HIDEABLE_ELEMENTS.filter(element => hide.includes(element)) : [];
     this._logoClickable = logoClickable !== false;
     storedGetToken = getToken ?? null;
-    this._forceTokenAuth = forceTokenAuth === true;
+    if (forceTokenAuth === true) forceTokenAuthForPage = true;
   };
 
   openModal = (
@@ -133,7 +142,7 @@ export class SkySlopeWidget {
   };
 
   get forceTokenAuth(): boolean {
-    return this._forceTokenAuth;
+    return forceTokenAuthForPage;
   }
 
   get openInline(): boolean {

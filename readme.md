@@ -440,8 +440,10 @@ What changes:
 - When Forms needs a new token mid-session, the widget asks `getToken` and reloads with it. If
   Forms still cannot sign in with the new token, the widget goes blank and raises
   `iframe-auth-failed` rather than reloading again.
-- The option is fixed for a mounted container. To change it, remove the container and add it
-  again.
+- Once a page sets `forceTokenAuth`, it stays on until the page reloads, even after the widget
+  closes and even if a later `initialize()` leaves it out. A forced widget never falls back to the
+  cookie, so a forgotten option cannot open the previous user. Still pass `getToken` on every
+  `initialize()`: without it the widget stays blank.
 - Signing out inside the widget signs the user out of the widget only. It does not sign anyone
   out of SkySlope elsewhere in the browser. The widget goes blank and raises `signed-out`.
 
@@ -451,8 +453,8 @@ To switch users, use the same order as above:
 2. Make sure `getToken` now returns the new user's token, or `null` if nobody is signed in.
 3. Call `await window.skyslope.widget.clearToken()`.
 
-`clearToken()` asks Forms to drop the old session, replaces the frame with a blank one, and loads
-the new user's token. If nobody is signed in, the widget stays blank and raises
+`clearToken()` hides the frame, asks Forms to drop the old session (up to three seconds), then
+loads the new user's token into a new frame. If nobody is signed in, the widget stays blank and raises
 `iframe-auth-failed`, or `token-clear-failed` when Forms did not confirm that it dropped the old
 session (for example while DigiSign was open). In that case the old session can stay stored in
 this browser tab, so keep `forceTokenAuth` on for every later open in the tab. A forced load
@@ -469,10 +471,17 @@ a second open in Safari.
 
 ```javascript
 function openForms() {
-  window.skyslope.widget.initialize({ getToken: myApp.getSkySlopeAccessToken });
+  window.skyslope.widget.initialize({
+    forceTokenAuth: true, // if you use it; see "Always sign in with your token"
+    getToken: myApp.getSkySlopeAccessToken,
+  });
   window.skyslope.widget.openModal();
 }
 ```
+
+The pre-made buttons open the modal themselves. To configure the widget before each of their
+opens, set `window.skyslope.onLoad` to a function that calls `initialize()`: the widget runs it
+each time it resets.
 
 ### The `authError` event
 

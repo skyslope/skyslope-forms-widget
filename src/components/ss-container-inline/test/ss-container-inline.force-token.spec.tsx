@@ -2,7 +2,7 @@
 import { newSpecPage } from '@stencil/core/testing';
 import { Env } from '@stencil/core';
 import { SsContainerInline } from '../ss-container-inline';
-import { SkySlopeWidget } from '../../../globalScript';
+import { SkySlopeWidget, resetForceTokenAuthForTests } from '../../../globalScript';
 import { GetTokenCallback as GetToken } from '../../../window';
 
 // Forced token authentication: initialize({ forceTokenAuth: true, getToken }).
@@ -28,6 +28,7 @@ function newFrame(): FakeFrame {
 // changes is played by render(): a new blank frame, then componentDidRender. With autoRender on
 // it runs on the next microtask after each replacement, as a real render would.
 function forced(getToken: GetToken | null, { force = true } = {}) {
+  resetForceTokenAuthForTests();
   const widget = new SkySlopeWidget();
   widget.initialize({ getToken, forceTokenAuth: force });
   (window as any).skyslope = { widget };
@@ -42,6 +43,8 @@ function forced(getToken: GetToken | null, { force = true } = {}) {
     frames,
     autoRender: true,
     frame: () => frames[frames.length - 1],
+    // Every forced load goes into a fresh frame, so collect the loads across all of them.
+    allLoads: () => frames.flatMap(f => f.loads),
     render: () => {
       if (component.frameReplaced != null) frames.push(newFrame());
       component.componentDidRender();
@@ -78,7 +81,9 @@ async function settle(rounds = 10) {
 
 afterEach(() => {
   delete (window as any).skyslope;
+  resetForceTokenAuthForTests();
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('forced mode: every load carries tokenOnly=1 and #t=', () => {
@@ -96,21 +101,31 @@ describe('forced mode: every load carries tokenOnly=1 and #t=', () => {
 
   it('reload() fetches a fresh token and loads it, instead of asking Forms to reload itself', async () => {
     const getToken = jest.fn().mockReturnValueOnce('token-a').mockReturnValue('token-a2');
-    const { component, frame } = forced(getToken);
+    const { component, frames, frame } = forced(getToken);
     await component.componentDidLoad();
+    const first = frame();
     await component.reloadIframe();
     expect(getToken).toHaveBeenCalledTimes(2);
-    expect(frame().contentWindow.postMessage).not.toHaveBeenCalledWith('reload', expect.anything());
-    expectTokenLoad(frame().loads[1], 'token-a2');
+    expect(first.contentWindow.postMessage).not.toHaveBeenCalledWith('reload', expect.anything());
+    // A fresh frame, so Forms boots again even if only the fragment changed.
+    expect(frames).toHaveLength(2);
+    expect(first.loads).toHaveLength(1);
+    expectTokenLoad(frame().loads[0], 'token-a2');
   });
 
   it('navigateTo() fetches a fresh token and loads the new path with it', async () => {
     const getToken = jest.fn().mockReturnValueOnce('token-a').mockReturnValue('token-a2');
     const { component, frame } = forced(getToken);
+    component.connectedCallback();
     await component.componentDidLoad();
-    await component.navigateTo();
+    await (window as any).skyslope.widget.navigateTo('files#section');
+    await settle();
     expect(getToken).toHaveBeenCalledTimes(2);
-    expectTokenLoad(frame().loads[1], 'token-a2');
+    const url = new URL(frame().loads[0]);
+    expect(url.pathname.endsWith('/files')).toBe(true);
+    // The token owns the whole fragment, even when the path brought its own.
+    expectTokenLoad(frame().loads[0], 'token-a2');
+    component.disconnectedCallback();
   });
 
   it('URL-encodes the token in the fragment', async () => {
@@ -182,11 +197,12 @@ describe('forced mode: Forms is never loaded without a token', () => {
     expectTokenLoad(frame().loads[0], 'recovered');
   });
 
-  it('keeps the policy it mounted with when initialize() later drops forceTokenAuth', async () => {
+  it('stays forced for the page when initialize() later drops forceTokenAuth', async () => {
     const getToken = jest.fn(() => 'jwt-a');
     const { component, frame } = forced(getToken);
     (window as any).skyslope.widget.initialize({ getToken });
-    expect((window as any).skyslope.widget.forceTokenAuth).toBe(false);
+    // Sticky for the page: a later initialize() without it does not switch back to the cookie.
+    expect((window as any).skyslope.widget.forceTokenAuth).toBe(true);
     await component.componentDidLoad();
     expectTokenLoad(frame().loads[0], 'jwt-a');
   });
@@ -195,12 +211,13 @@ describe('forced mode: Forms is never loaded without a token', () => {
 describe('forced mode: forms-auth-failed (C4)', () => {
   it('answers with a fresh getToken and a reload that carries the new token', async () => {
     const getToken = jest.fn().mockReturnValueOnce('token-1').mockReturnValue('token-2');
-    const { component, frame, emitted } = forced(getToken);
+    const { component, frame, frames, emitted } = forced(getToken);
     await component.componentDidLoad();
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
     expect(getToken).toHaveBeenCalledTimes(2);
-    expectTokenLoad(frame().loads[1], 'token-2');
+    expect(frames).toHaveLength(2);
+    expectTokenLoad(frame().loads[0], 'token-2');
     expect(emitted).toEqual([]);
   });
 
@@ -210,39 +227,46 @@ describe('forced mode: forms-auth-failed (C4)', () => {
     await component.componentDidLoad();
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
-    const usedFrame = frame();
-    component.handleMessage(message(usedFrame, { status: 'forms-auth-failed' }));
+    // The retry frame reports a live session, then fails again: still inside the window.
+    component.handleMessage(message(frame(), { status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 }));
+    component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
     expect(getToken).toHaveBeenCalledTimes(2);
     expect(emitted).toEqual([{ reason: 'iframe-auth-failed' }]);
     // Failing closed blanks the frame that had Forms in it.
-    expect(frames).toHaveLength(2);
+    expect(frames).toHaveLength(3);
     expect(frame().loads).toEqual([]);
   });
 
-  it('reloads again for a later forms-auth-failed once Forms reported a live session', async () => {
+  it('reloads again for a forms-auth-failed more than a minute after the last automatic reload', async () => {
     const getToken = jest.fn().mockReturnValueOnce('t1').mockReturnValueOnce('t2').mockReturnValue('t3');
     const { component, frame, emitted } = forced(getToken);
     await component.componentDidLoad();
+    let now = Date.now();
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
-    component.handleMessage(message(frame(), { status: 'forms-session-expiry', exp: Math.floor(Date.now() / 1000) + 3600 }));
+    now += 60 * 1000;
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
-    expectTokenLoad(frame().loads[2], 't3');
+    expectTokenLoad(frame().loads[0], 't3');
     expect(emitted).toEqual([]);
   });
 
-  it('reloads again after a successful token install answer', async () => {
-    const getToken = jest.fn().mockReturnValueOnce('t1').mockReturnValueOnce('t2').mockReturnValue('t3');
+  it('ignores a repeat forms-auth-failed from the old page while the retry is pending', async () => {
+    let finish: (token: string) => void;
+    const getToken = jest
+      .fn()
+      .mockReturnValueOnce('t1')
+      .mockImplementationOnce(() => new Promise(r => (finish = r)));
     const { component, frame, emitted } = forced(getToken);
     await component.componentDidLoad();
-    component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
+    const oldFrame = frame();
+    component.handleMessage(message(oldFrame, { status: 'forms-auth-failed' }));
+    component.handleMessage(message(oldFrame, { status: 'forms-auth-failed' }));
+    finish('t2');
     await settle();
-    component.handleMessage(message(frame(), { status: 'forms-token-installed', ok: true, exp: Math.floor(Date.now() / 1000) + 3600 }));
-    component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
-    await settle();
-    expectTokenLoad(frame().loads[2], 't3');
+    expectTokenLoad(frame().loads[0], 't2');
     expect(emitted).toEqual([]);
   });
 
@@ -253,9 +277,10 @@ describe('forced mode: forms-auth-failed (C4)', () => {
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
     await component.reloadIframe();
+    await settle();
     component.handleMessage(message(frame(), { status: 'forms-auth-failed' }));
     await settle();
-    expectTokenLoad(frame().loads[3], 't4');
+    expectTokenLoad(frame().loads[0], 't4');
     expect(emitted).toEqual([]);
   });
 
@@ -568,5 +593,120 @@ describe('forced mode: real render', () => {
     expect(getToken).toHaveBeenCalledTimes(2);
     element.remove();
     await page.waitForChanges();
+  });
+});
+
+describe('forced mode: review fixes', () => {
+  it('a container mounted after a close stays forced even if the host forgot forceTokenAuth', async () => {
+    const getToken = jest.fn(() => 'user-b');
+    const { component } = forced(getToken);
+    component.connectedCallback();
+    component.disconnectedCallback();
+    // The close reset every setting; the host reopens with getToken only.
+    (window as any).skyslope.widget.initialize({ getToken });
+    const next = new SsContainerInline() as any;
+    next.componentWillLoad();
+    expect(next.forceTokenAuth).toBe(true);
+    expect(next.render().$children$[0].$attrs$.src).toBeUndefined();
+  });
+
+  it.each(['digisign-auth-required', 'forms-session-expiry'])('gives the old page no token during the clear handshake (%s)', async status => {
+    let answer: (app: string | null) => void;
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue('user-b');
+    const { component, frame, emitted } = forced(getToken);
+    await component.componentDidLoad();
+    const oldFrame = frame();
+    component.askFrameToClear = () => new Promise(r => (answer = r));
+    const clearing = component.clearToken();
+    if (status === 'digisign-auth-required') component.handleMessage(message(oldFrame, { status }, DIGISIGN_ORIGIN));
+    else component.handleMessage(message(oldFrame, { status, exp: Math.floor(Date.now() / 1000) + 3600, sessionless: true }));
+    await settle();
+    // A host refreshToken() must not hand the new user's token to the old page either.
+    await component.renewNow();
+    const sentTokens = oldFrame.contentWindow.postMessage.mock.calls.filter(([m]) => m?.token != null);
+    expect(sentTokens).toEqual([]);
+    answer('forms');
+    await clearing;
+    expectTokenLoad(frame().loads[0], 'user-b');
+    expect(emitted).toEqual([]);
+  });
+
+  it('a reload during the clear handshake replaces the old page at once', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue('user-b');
+    const { component, frames, frame } = forced(getToken);
+    await component.componentDidLoad();
+    component.askFrameToClear = () => new Promise(() => undefined);
+    void component.clearToken();
+    await component.reloadIframe();
+    expect(frames).toHaveLength(2);
+    expectTokenLoad(frame().loads[0], 'user-b');
+  });
+
+  it('hides the frame while a clear waits for Forms, and shows the replacement', async () => {
+    let answer: (app: string | null) => void;
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue('user-b');
+    const { component } = forced(getToken);
+    await component.componentDidLoad();
+    component.askFrameToClear = () => new Promise(r => (answer = r));
+    const clearing = component.clearToken();
+    expect(component.render().$children$[0].$attrs$.style.visibility).toBe('hidden');
+    answer('forms');
+    await clearing;
+    expect(component.render().$children$[0].$attrs$.style.visibility).toBeUndefined();
+  });
+
+  it('shows the frame again after a clear cut short by a detach', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue('user-b');
+    let answer: (app: string | null) => void;
+    const { component, frame } = forced(getToken);
+    await component.componentDidLoad();
+    component.askFrameToClear = () => new Promise(r => (answer = r));
+    const clearing = component.clearToken();
+    component.disconnectedCallback();
+    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    const reconnect = component.connectedCallback();
+    answer(null);
+    await Promise.all([clearing, reconnect]);
+    expectTokenLoad(frame().loads[frame().loads.length - 1], 'user-b');
+    expect(component.render().$children$[0].$attrs$.style.visibility).toBeUndefined();
+  });
+
+  it('the default path renders the iframe style unchanged', () => {
+    const { component } = forced(() => 'token', { force: false });
+    component.componentWillLoad();
+    expect(component.render().$children$[0].$attrs$.style).toEqual({ backgroundColor: '#f4f8fc' });
+  });
+
+  it('a sign-out clear with no live frame after a session reports token-clear-failed', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValue(null);
+    const { component, emitted } = forced(getToken);
+    await component.componentDidLoad();
+    // The frame lost its page (detached), so nobody can confirm the clear.
+    component.disconnectedCallback();
+    (window as any).skyslope.widget.initialize({ forceTokenAuth: true, getToken });
+    component.askFrameToClear = jest.fn();
+    await component.clearToken();
+    expect(component.askFrameToClear).not.toHaveBeenCalled();
+    expect(emitted).toEqual([{ reason: 'token-clear-failed' }]);
+  });
+
+  it('a load superseded while it waits for the replacement frame never lands', async () => {
+    const getToken = jest.fn().mockReturnValueOnce('user-a').mockReturnValueOnce('stale').mockReturnValue('latest');
+    const harness = forced(getToken);
+    const { component, frames } = harness;
+    await component.componentDidLoad();
+    harness.autoRender = false;
+    const first = component.navigateTo();
+    await settle();
+    expect(getToken).toHaveBeenCalledTimes(2);
+    const second = component.navigateTo();
+    await settle();
+    harness.render();
+    await Promise.all([first, second]);
+    const loads = harness.allLoads();
+    expect(loads.some(url => url.includes('stale'))).toBe(false);
+    // Only the latest navigation loads, once.
+    expect(frames[frames.length - 1].loads).toHaveLength(1);
+    expectTokenLoad(frames[frames.length - 1].loads[0], 'latest');
   });
 });
