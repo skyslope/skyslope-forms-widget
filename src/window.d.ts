@@ -61,9 +61,9 @@ export interface SkyslopeConfig {
   /**
    * Sign Forms in only with tokens from getToken, in every browser, never from the SkySlope
    * cookie (which can belong to another user of the browser). The frame stays blank until
-   * getToken returns a token. Requires getToken. Defaults to false. Read when a container mounts;
-   * once set, it stays on for the rest of the page's life, across closes and later initialize()
-   * calls.
+   * getToken returns a token. Requires getToken. Defaults to false. Once set, it stays on for the
+   * rest of the page's life, across closes and later initialize() calls; a container already open
+   * switches at its next reload, navigation, clear or reattach.
    */
   forceTokenAuth?: boolean;
 }

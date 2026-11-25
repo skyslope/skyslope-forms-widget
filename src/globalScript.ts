@@ -15,9 +15,22 @@ export function readGetToken(): GetTokenCallback | null {
 // Falling back to the cookie then would open the widget as whoever owns the SkySlope cookie.
 let forceTokenAuthForPage = false;
 
+// True while a forced Forms session may still be stored in this tab: one loaded and not since
+// confirmed cleared. Kept here so it outlives the container that loaded it.
+let forcedSessionMayRemain = false;
+
+export function readForcedSessionMayRemain(): boolean {
+  return forcedSessionMayRemain;
+}
+
+export function setForcedSessionMayRemain(value: boolean): void {
+  forcedSessionMayRemain = value;
+}
+
 // Only for specs, which share this module across cases.
 export function resetForceTokenAuthForTests(): void {
   forceTokenAuthForPage = false;
+  forcedSessionMayRemain = false;
 }
 
 // Kept in step with WidgetHideableElement. Anything else a host passes is dropped, so only values

@@ -443,7 +443,8 @@ What changes:
 - Once a page sets `forceTokenAuth`, it stays on until the page reloads, even after the widget
   closes and even if a later `initialize()` leaves it out. A forced widget never falls back to the
   cookie, so a forgotten option cannot open the previous user. Still pass `getToken` on every
-  `initialize()`: without it the widget stays blank.
+  `initialize()`: without it the widget stays blank. A widget that was already open when you
+  turned the option on switches to it at its next `reload()`, `navigateTo()` or `clearToken()`.
 - Signing out inside the widget signs the user out of the widget only. It does not sign anyone
   out of SkySlope elsewhere in the browser. The widget goes blank and raises `signed-out`.
 
