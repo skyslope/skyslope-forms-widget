@@ -18,9 +18,9 @@ jobs:
     # list. This public repository can use only the public-release group,
     # which GitHub restricts to this file and release.yml on main.
     # pull_request runs the workflow from the pull request, so it cannot
-    # take a runner. pull_request_target runs this file from main. Check out
-    # the pull request below and do not run its scripts. Do not add
-    # workflow_dispatch. Do not attach the release environment.
+    # take a runner. Only repository writers can supply a head commit to
+    # this privileged runner. Fork changes are scanned after merge to main.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on:
       group: public-release
       labels: skyslope-public-release
@@ -51,7 +51,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3.39.0

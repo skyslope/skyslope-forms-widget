@@ -192,14 +192,15 @@ an ARM64 runner in the `public-release` group in ops-west. That group is the
 only self-hosted group open to this public repository. GitHub restricts it to
 `.github/workflows/release.yml` and `.github/workflows/codeql.yml` on `main`,
 so a `pull_request` run, including a fork's, cannot use it. The release
-workflow triggers only on a push to `main`. CodeQL also triggers on
-`pull_request_target`, which runs this file from `main` and checks out the
-pull request commit with credentials disabled. It does not run that commit's
-scripts. The release job runs in the `release` environment, which only `main`
-can use and which needs a reviewer's approval. It reads `NPM_TOKEN` and a
-GitHub App private key from Actions secrets, publishes with the former, and
-pushes the release commit and tag with a short-lived installation token minted
-from the latter. The workflow's own token is read-only. The CodeQL job is not
+workflow triggers only on a push to `main`. The CodeQL job also scans
+same-repository pull requests through `pull_request_target` with checkout
+credentials disabled and build mode set to `none`. It scans fork changes
+when they reach `main`. The release job runs in the `release` environment,
+which only `main` can use and which needs a reviewer's approval.
+Standalone semantic-release core drives versioning and tagging. The npm
+CLI installed with Node.js publishes to npm using the `NPM_TOKEN` secret.
+A short-lived GitHub App installation token pushes the release commit
+and tag. The workflow's own token is read-only. The CodeQL job is not
 in that environment and has no write access to repository contents, so it
 cannot publish the package or push to `main`. Its token can upload code
 scanning results. The runner

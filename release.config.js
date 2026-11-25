@@ -14,10 +14,10 @@ module.exports = {
       releasedLabels: false
     }],
     // Publish to npm
-    '@semantic-release/npm',
+    './deployment/npm-plugin.mjs',
     // Commit updated changelog and package.json files back to the repository
     ['@semantic-release/git', {
-      assets: ['package.json', 'CHANGELOG.md'],
+      assets: ['package.json', 'package-lock.json', 'CHANGELOG.md'],
       message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}'
     }]
   ]
